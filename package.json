@@ -1,0 +1,39 @@
+{
+  "name": "requirex",
+  "version": "0.1.0",
+  "description": "A different kind of module loader",
+  "main": "dist/cjs/index.js",
+  "module": "dist/esm/index.js",
+  "browser": "dist/umd/index.js",
+  "typings": "dist/esm/index.d.ts",
+  "scripts": {
+    "tsc": "tsc",
+    "prepublish": "tsc -p src"
+  },
+  "author": "Juha Järvi",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/requirex/requirex.git"
+  },
+  "bugs": {
+    "url": "https://github.com/requirex/requirex/issues"
+  },
+  "homepage": "https://github.com/requirex/requirex#readme",
+  "keywords": [
+    "amd",
+    "cjs",
+    "loader",
+    "require",
+    "requirejs",
+    "system",
+    "systemjs"
+  ],
+  "devDependencies": {
+    "@types/node": "^11.11.3",
+    "typescript": "^3.4"
+  },
+  "dependencies": {
+    "tslib": "^1.9.3"
+  }
+}
