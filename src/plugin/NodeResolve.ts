@@ -1,9 +1,10 @@
-import { URL } from '../URL';
+import { URL, skipSlashes } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { fetch, FetchResponse } from '../fetch';
 import { Loader, LoaderConfig, getDir } from '../LoaderBase';
 
+const emptyPromise = Promise.resolve();
 const nodeModules = '/node_modules/';
 
 // Relative path.
@@ -30,18 +31,8 @@ for(let key of ('assert buffer crypto fs http https module net os path stream ur
 	isInternal[key] = true;
 }
 
-/** Skip 3 slashes in a path starting from a given offset. */
-
-function skipSlashes(key: string, start: number) {
-	let count = 3;
-
-	while((start = key.indexOf('/', start) + 1) && --count);
-
-	return(start);
-}
-
 function getRootConfigPaths(baseKey: string) {
-	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules));
+	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules), 3);
 
 	const result: string[] = [];
 	let end = baseKey.length;
@@ -58,7 +49,7 @@ function getRootConfigPaths(baseKey: string) {
 }
 
 function getRepoPaths(loader: Loader, baseKey: string) {
-	let start = skipSlashes(baseKey, 0);
+	let start = skipSlashes(baseKey, 0, 3);
 
 	const resultPreferred: { preferred?: boolean, root: string }[] = [];
 	const resultOther: { preferred?: boolean, root: string }[] = [];
@@ -84,9 +75,9 @@ function getRepoPaths(loader: Loader, baseKey: string) {
 	return(resultPreferred.concat(resultOther));
 }
 
-function parsePackage(rootKey: string, data: string) {
+function parsePackage(rootKey: string, data: string, name?: string) {
 	const json = JSON.parse(data);
-	const pkg = new Package(rootKey);
+	const pkg = new Package(name || json.name, rootKey);
 
 	pkg.version = json.version;
 	pkg.main = json.main || 'index.js';
@@ -114,19 +105,38 @@ function parsePackage(rootKey: string, data: string) {
 			pkg.map[src] = dst;
 			pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
 		}
-
-		/*
-		for(let key of Object.keys(pkg.browser)) {
-			subConfig.map[key] = pkg.browser[key] || '@empty';
-		}
-		*/
 	}
 
 	return(pkg);
 }
 
 function ifExists(key: string) {
+	// TODO: Fail for wrong MIME type (mainly html error messages).
 	return(fetch(key, { method: 'HEAD' }).then((res) => res.url));
+}
+
+function parseFetchedPackage(
+	loader: Loader,
+	rootKey: string,
+	fetched: Promise<FetchResponse>,
+	name?: string
+) {
+	let redirKey: string;
+
+	const parsed = fetched.then((res: FetchResponse) => {
+		redirKey = res.url;
+		return(res.text());
+	}).then((data: string) => {
+		const pkg = parsePackage(getDir(redirKey), data, name)
+		loader.packageConfTbl[rootKey] = pkg;
+		loader.packageConfTbl[pkg.root] = pkg;
+		loader.packageRootTbl[rootKey] = pkg;
+		loader.packageRootTbl[pkg.root] = pkg;
+		return(pkg);
+	});
+
+	loader.packageConfTbl[rootKey] = parsed;
+	return(parsed);
 }
 
 function fetchPackage(
@@ -138,36 +148,38 @@ function fetchPackage(
 	repoNum = repoNum || 0;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root;
-	let jsonKey = repoKey + name + '/package.json';
 
-	const fetched = repo.preferred ? fetch(jsonKey) : ifExists(jsonKey).then((key: string) => {
-		// A repository was found so look for additional packages there
-		// before other addresses.
-		loader.repoTbl[repoKey] = true;
-		return(fetch(key));
-	});
+	let parsed = loader.packageConfTbl[repoKey + name];
 
-	const result = fetched.then((res: FetchResponse) => {
-		jsonKey = res.url;
-		return(res.text());
-	}).then((data: string) => {
-		const pkg = parsePackage(getDir(jsonKey), data)
-		loader.packageRootTbl[repoKey + name] = pkg;
-		loader.packageRootTbl[pkg.root] = pkg;
-		return(pkg);
-	}).catch(
+	if(!parsed) {
+		const jsonKey = repoKey + name + '/package.json';
+
+		const fetched = repo.preferred ? fetch(jsonKey) : ifExists(jsonKey).then((key: string) => {
+			// A repository was found so look for additional packages there
+			// before other addresses.
+			loader.repoTbl[repoKey] = true;
+			return(fetch(key));
+		});
+
+		parsed = parseFetchedPackage(loader, repoKey + name, fetched, name);
+	}
+
+	return(Promise.resolve<Package | false>(parsed).catch(
 		() => ++repoNum! < repoList.length ? fetchPackage(loader, repoList, name, repoNum) : false
-	);
-
-	return(result);
+	));
 }
 
 function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string | undefined) {
-	const result = loader.fetch(key + '/package.json').then(
-		(res: FetchResponse) => res.text()
-	).then((data: string) => {
-		return(parsePackage(key, data));
-	}).catch(() => {
+	let parsed = loader.packageConfTbl[key];
+
+	if(!parsed) {
+		parsed = parseFetchedPackage(loader, key, loader.fetch(key + '/package.json'));
+	} else if(parsed instanceof Package) {
+		loader.packageRootTbl[key] = parsed;
+		return(Promise.resolve(parsed));
+	}
+
+	const result = parsed.catch(() => {
 		const nextKey = getNext();
 		// On error always try the next possible (parent) directory.
 		return(nextKey ? loader.packageRootTbl[nextKey] : false);
@@ -175,6 +187,7 @@ function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string 
 		(pkg: false | Package) => loader.packageRootTbl[key] = pkg
 	);
 
+	loader.packageRootTbl[key] = result;
 	return(result);
 }
 
@@ -207,11 +220,11 @@ function fetchContainingPackage(loader: Loader, baseKey: string) {
 		if(!best) best = key;
 
 		// Try the most likely root dir first.
-		const bestPromise = tryFetchPackageRoot(loader, best, () => {
+		pkg = tryFetchPackageRoot(loader, best, () => {
 			/** Result for this promise comes from a parent dir. */
 			let afterBest: string | undefined;
 
-			// Try all possible root dirs.
+			// Try all possible root dirs in parallel.
 			for(let num = 0; num < count; ++num) {
 				const key = rootConfigPaths[num];
 				const nextKey: string | undefined = rootConfigPaths[num + 1];
@@ -223,15 +236,14 @@ function fetchContainingPackage(loader: Loader, baseKey: string) {
 				} else if(packageRootTbl[key] === void 0) {
 					// Try a possible root dir and store the resulting
 					// promise to avoid repeated attempts.
-					packageRootTbl[key] = tryFetchPackageRoot(loader, key, () => nextKey);
+					tryFetchPackageRoot(loader, key, () => nextKey);
 				}
 			}
 
 			return(afterBest);
-		});
-
-		packageRootTbl[best] = bestPromise;
-		pkg = bestPromise.catch(() => packageRootTbl[rootConfigPaths[0]]);
+		}).catch(
+			() => packageRootTbl[rootConfigPaths[0]]
+		);
 	}
 
 	return(Promise.resolve<Package | false>(pkg || false));
@@ -299,7 +311,10 @@ export class NodeResolve extends Loader {
 				} else break;
 			}
 
-			if(inRegistry(this, key)) return(key);
+			if(inRegistry(this, key)) {
+				resolvedKey = key;
+				break;
+			}
 
 			const match = key.match(rePackage);
 			if(!match) break;
@@ -308,9 +323,13 @@ export class NodeResolve extends Loader {
 			const otherPkg = this.packageNameTbl[name];
 
 			if(!(otherPkg instanceof Package)) {
+				// Configuration for referenced package is not currently available.
 				if(ref) {
-					ref.packageName = name;
-					if(isInternal[name]) ref.format = 'node';
+					ref.pendingPackageName = name;
+					if(isInternal[name]) {
+						pkg = this.package;
+						ref.format = 'node';
+					}
 				}
 
 				break;
@@ -326,40 +345,48 @@ export class NodeResolve extends Loader {
 		}
 
 		if(ref) {
-			ref.baseKey = baseKey;
-			// ref.importKey = key;
+			ref.package = pkg;
 		}
 
 		return(resolvedKey);
 	}
 
 	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
+		let resolvedKey: string;
+		let packageName: string | undefined;
+
 		// Find a package containing baseKey, to get browser path and
 		// package mappings and versions.
+		const result = fetchContainingPackage(this, baseKey).then((basePkg: Package | false) => {
+			resolvedKey = this.resolveSync(key, baseKey, ref);
+			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
-		const result = fetchContainingPackage(this, baseKey).then((pkg: Package | false) => {
-			const resolvedKey = this.resolveSync(key, baseKey, ref);
+			packageName = ref.pendingPackageName;
 
-			if(ref.format == 'node') return(ref.packageName!);
+			if(packageName && ref.format != 'node') {
+				parsed = this.packageNameTbl[packageName];
 
-			const result: Promise<string> = checkFile(this, resolvedKey, key, ref).catch(() => {
-				if(!ref.packageName || this.packageNameTbl[ref.packageName] === false) {
-					throw(new Error('FOOBAR'));
-				}
-
-				return(
-					fetchPackage(
+				if(parsed === void 0) {
+					parsed = fetchPackage(
 						this,
-						getRepoPaths(this, ref.baseKey!),
-						ref.packageName
-					).then((pkg: Package | false) => {
-						this.packageNameTbl[ref.packageName!] = pkg;
-						return(checkFile(this, this.resolveSync(key, baseKey, ref), key, ref));
-					})
-				);
-			});
+						getRepoPaths(this, baseKey),
+						packageName
+					);
 
-			return(result);
+					this.packageNameTbl[packageName!] = parsed as Promise<Package | false>;
+				}
+			}
+
+			return(parsed);
+		}).then((pkg: Package | false | undefined) => {
+			if(ref.format == 'node') return(packageName!);
+
+			if(pkg) {
+				this.packageNameTbl[packageName!] = pkg;
+				resolvedKey = this.resolveSync(key, baseKey, ref);
+			}
+
+			return(checkFile(this, resolvedKey, key, ref));
 		});
 
 		return(result);

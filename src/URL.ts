@@ -7,6 +7,14 @@ const reUrl = /^([0-9A-Za-z]+:)?([^?#]*)(\??[^#]*)(#?.*)$/;
 
 const knownProto: { [proto: string]: 1 } = { 'file:': 1, 'http:': 1, 'https:': 1 };
 
+/** Skip given number of slashes in a path starting from a given offset. */
+
+export function skipSlashes(key: string, start: number, count: number) {
+	while((start = key.indexOf('/', start) + 1) && --count);
+
+	return(start);
+}
+
 export class URL {
 
 	/** Resolve a relative address. */
@@ -33,7 +41,7 @@ export class URL {
 		// Handle an absolute key.
 		if(key.charAt(0) == '/') {
 			if(!hasServer) {
-				// If there is no server name, clear everything.
+				// If the base address has no server name, clear everything.
 				base = '';
 			} else if(key.charAt(1) == '/') {
 				// Two leading slashes remove everything after the protocol.
@@ -99,6 +107,24 @@ export class URL {
 		}
 
 		return(pos);
+	}
+
+	static relative(base: string, key: string) {
+		const start = URL.common(base, key);
+		const pathOffset = skipSlashes(base, 0, 3);
+
+		if(!pathOffset || pathOffset > start) return(key);
+
+		let pos = start;
+		let next: number;
+		let prefix = '';
+
+		while((next = base.indexOf('/', pos) + 1)) {
+			prefix += '../';
+			pos = next;
+		}
+
+		return(prefix + key.substr(start));
 	}
 
 	static fromLocal(local: string) {

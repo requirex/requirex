@@ -39,8 +39,9 @@ const reModuleExports = /^\s*(\[\s*["'`]exports["'`]\s*\]|\.\s*exports)\s*(\[["'
 /** Match access to members of exports using dot or array notation. */
 const reExports = /^\s*(\[["'`]|\.)/;
 
-/** Match a non-identifier, non-numeric character or return statement before a regular expression. */
-const reRegExp = /(^|[!%&(*+,-/:;<=>?\[^{|}~])\s*(return\s+)?$/;
+/** Match a non-identifier, non-numeric character or return statement before a regular expression.
+  * Example code seen in the wild: function(t){return/[A-Z]+/g.test(t)} */
+const reBeforeRegExp = /(^|[!%&(*+,-/:;<=>?\[^{|}~])\s*(return\s*)?$/;
 
 /** Match a hashbang header line used to make JS files executable in *nix systems. */
 const reHashBang = /^\ufeff?#![^\r\n]*/;
@@ -207,6 +208,7 @@ export class JS extends Loader {
 		if(match) {
 			// Remove the header.
 			text = text.substr(match[0].length);
+			record.sourceCode = text;
 
 			// Anything meant to run as a script is probably CommonJS,
 			// but keep trying to detect module type anyway.
@@ -252,7 +254,7 @@ export class JS extends Loader {
 					pos = Math.max(last - chunkSize, 0);
 					chunkBefore = text.substr(pos, last - pos);
 
-					if(!reRegExp.test(chunkBefore)) {
+					if(!reBeforeRegExp.test(chunkBefore)) {
 						continue;
 					}
 

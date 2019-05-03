@@ -19,6 +19,7 @@ declare module '../Loader' {
 function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 	return({
 		getCompilationSettings: () => ({
+			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			target: ts.ScriptTarget.ES5,
 			// module: ts.ModuleKind.CommonJS
@@ -38,6 +39,10 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 				if(format == 'esm' || format == 'ts' || format == 'd.ts' || record.tsSnapshot) {
 					keys.push(key.replace(/\.js$/, '.ts'));
 				}
+
+				if(format == 'tsx') {
+					keys.push(key.replace(/\.js$/, '.tsx'));
+				}
 			}
 
 			return(keys);
@@ -46,7 +51,7 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 			return('0');
 		},
 		getScriptSnapshot: (key: string) => {
-			const record = loader.records[key] || loader.records[key.replace(/\.ts$/, '.js')];
+			const record = loader.records[key] || loader.records[key.replace(/\.tsx?$/, '.js')];
 
 			return(
 				record.tsSnapshot ||
@@ -92,8 +97,8 @@ export class TS extends Loader {
 
 	translate(record: Record) {
 		if(record.format == 'd.ts') return;
-		const tsKey = record.resolvedKey.replace(/\.js$/, '.ts');
-		const jsKey = record.resolvedKey.replace(/\.ts$/, '.js');
+		const tsKey = record.resolvedKey.replace(/\.js$/, '.' + record.format);
+		const jsKey = record.resolvedKey.replace(/\.tsx?$/, '.js');
 
 		for(let info of this.tsService.getEmitOutput(tsKey).outputFiles) {
 			if(info.name == jsKey) {

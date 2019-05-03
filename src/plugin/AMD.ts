@@ -12,6 +12,9 @@ export class AMD extends Loader {
 		(this.amdDefine as any).amd = true;
 	}
 
+	// TODO: In browsers a fetch method could simply set globals and
+	// inject a script element.
+
 	amdDefine = ((loader: Loader) => function amdDefine(
 		key?: string | string[] | ModuleFactory,
 		deps?: string[] | ModuleFactory,
@@ -51,9 +54,9 @@ export class AMD extends Loader {
 		// Otherwise create a new record.
 
 		if(key != record.importKey && resolvedKey != record.resolvedKey) {
-			record = loader.records[key] || (
+			record = record.addBundled(loader.records[key] || (
 				loader.records[key] = new Record(loader, key)
-			);
+			));
 		}
 
 		const internalDeps: { [key: string]: number } = {
@@ -148,22 +151,36 @@ export class AMD extends Loader {
 			uri: record.resolvedKey
 		};
 
+		// TODO: Is changing global define necessary?
 		const define = globalEnv.define;
 		globalEnv.define = this.amdDefine;
 		this.latestRecord = record;
+		record.wrapArgs(record.globalTbl, {
+			'define': this.amdDefine
+		});
 
 		try {
-			const wrapped = globalEval(globalEnv, record.sourceCode, record.globalTbl, {
-				'define': this.amdDefine
-			});
+			const compiled = globalEval(record.sourceCode);
 
 			// Call imported module.
-			wrapped();
+			compiled.apply(globalEnv, record.evalArgs);
+
+			// If only one module was defined but with a strange key not
+			// matching the file name, assume it was still meant as the exports.
+			if(!record.factory && record.bundleChildren && record.bundleChildren.length == 1) {
+				const child = record.bundleChildren[0];
+
+				record.depList = child.depList;
+				record.depNumList = child.depNumList;
+				record.depTbl = child.depTbl;
+				record.factory = child.factory;
+			}
 		} catch(err) {
 			record.loadError = err;
 		}
 
 		this.latestRecord = void 0;
+		// TODO: Is changing global define necessary?
 		globalEnv.define = define;
 	}
 
@@ -204,6 +221,10 @@ export class AMD extends Loader {
 		}
 
 		return(moduleInternal.exports);
+	}
+
+	wrap(record: Record) {
+		return(record.sourceCode);
 	}
 
 }

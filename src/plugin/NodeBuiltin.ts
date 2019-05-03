@@ -39,6 +39,10 @@ function makeShims(loader: Loader) {
 				key.charAt(0) == '/' ||
 				(isWin && key.match(/^[A-Za-z]+:\//))
 			),
+			// TODO: Fix this!
+			relative: (base: string, key: string) => {
+				return(URL.relative(URL.resolve(loader.cwd, base), URL.resolve(loader.cwd, key)));
+			},
 			resolve: (...args: string[]) => {
 				let result = loader.cwd;
 
@@ -67,18 +71,19 @@ export class NodeBuiltin extends Loader {
 
 	instantiate(record: Record) {
 		if(!this.nodeShims) this.nodeShims = makeShims(this);
-		// return((record.moduleInternal.exports = nodeRequire(record.resolvedKey)));
 
 		const native = nodeRequire(record.resolvedKey);
 		const shim = this.nodeShims[record.resolvedKey] || {};
 
 		for(let name in native) {
-			record.moduleInternal.exports[name] = shim[name] || function() {
-				return(native[name].apply(native, arguments));
-			};
+			record.moduleInternal.exports[name] = shim[name] || native[name];
 		}
 
 		return(record.moduleInternal.exports);
+	}
+
+	wrap(record: Record) {
+		return('null');
 	}
 
 }

@@ -6,9 +6,14 @@
   "module": "dist/esm/index.js",
   "browser": "dist/umd/index.js",
   "typings": "dist/esm/index.d.ts",
+  "bin": {
+    "requirex": "./bin/requirex"
+  },
   "scripts": {
     "tsc": "tsc",
-    "prepublish": "tsc -p src"
+    "start": "./serve.bat",
+    "prepublish": "tsc -p src && tsc -p src/tsconfig.esm.json && (checkver lt 5.0.0 || rollup -c) && uglifyjs dist/umd/index.js -c -m > dist/umd/index.min.js",
+    "test": "node bin/requirex ./test/test.ts"
   },
   "author": "Juha Järvi",
   "license": "MIT",
@@ -31,7 +36,10 @@
   ],
   "devDependencies": {
     "@types/node": "^11.11.3",
-    "typescript": "^3.4"
+    "autoroll": "^0.2.0",
+    "rollup": "^1.6.0",
+    "typescript": "^3.4",
+    "uglify-js": "^3.5.1"
   },
   "dependencies": {
     "tslib": "^1.9.3"

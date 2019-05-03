@@ -1,0 +1,5 @@
+#!/usr/bin/env node
+
+const url = require('..').URL;
+
+System.import(url.resolve(process.cwd() + '/', process.argv[2]));

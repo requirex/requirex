@@ -13,7 +13,14 @@ export class CJS extends Loader {
 		const cjsRequire: NodeRequire = (
 			(key: string) => {
 				const ref = record.depTbl[key];
-				return(ref.module ? ref.module.exports : this.instantiate(ref.record!))
+				if(ref) {
+					return(ref.module ? ref.module.exports : this.instantiate(ref.record!))
+				}
+
+				const resolvedKey = this.resolveSync(key, record.resolvedKey);
+				const moduleObj = this.registry[resolvedKey];
+
+				return(moduleObj.exports);
 			}
 		 ) as any;
 
@@ -25,7 +32,7 @@ export class CJS extends Loader {
 		// TODO: Object.defineProperty(exports, "__esModule", { value: true });
 		const exports = {};
 
-		record.moduleInternal = {
+		const moduleInternal = record.moduleInternal = {
 			exports,
 			filename: getLocal(record.resolvedKey),
 			id: record.resolvedKey,
@@ -34,26 +41,30 @@ export class CJS extends Loader {
 			paths: [],
 			require: cjsRequire
 		};
+
+		record.wrapArgs(record.globalTbl, {
+			'require': moduleInternal.require,
+			'exports': moduleInternal.exports,
+			'module': moduleInternal,
+			'__filename': moduleInternal.filename,
+			'__dirname': getLocal(getDir(record.resolvedKey)),
+			'global': globalEnv,
+			'GLOBAL': globalEnv
+		});
 	}
 
 	instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleCJS;
-		let wrapped: () => any;
+		let compiled = record.compiled;
 
-		try {
-			// Compile module into a function under global scope.
-			wrapped = globalEval(moduleInternal.exports, record.sourceCode, record.globalTbl, {
-				'require': moduleInternal.require,
-				'exports': moduleInternal.exports,
-				'module': moduleInternal,
-				'__filename': moduleInternal.filename,
-				'__dirname': getLocal(getDir(record.resolvedKey)),
-				'global': globalEnv,
-				'GLOBAL': globalEnv
-			});
-		} catch(err) {
-			record.loadError = err;
-			throw(err);
+		if(!compiled) {
+			try {
+				// Compile module into a function under global scope.
+				compiled = globalEval(record.sourceCode);
+			} catch(err) {
+				record.loadError = err;
+				throw(err);
+			}
 		}
 
 		// Disable AMD autodetection in called code.
@@ -64,7 +75,7 @@ export class CJS extends Loader {
 
 		try {
 			// Call imported module.
-			wrapped();
+			compiled.apply(moduleInternal.exports, record.evalArgs);
 			moduleInternal.loaded = true;
 		} catch(err) {
 			error = err;
@@ -76,6 +87,10 @@ export class CJS extends Loader {
 		if(error) throw(error);
 
 		return(moduleInternal.exports);
+	}
+
+	wrap(record: Record) {
+		return(record.sourceCode);
 	}
 
 }

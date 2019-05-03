@@ -6,6 +6,9 @@ export class Register extends Loader {
 
 	// constructor(config?: LoaderConfig) {}
 
+	// TODO: In browsers a fetch method could simply set globals and
+	// inject a script element.
+
 	discover(record: Record) {
 		const exports = {};
 
@@ -14,15 +17,17 @@ export class Register extends Loader {
 			id: record.resolvedKey
 		};
 
+		record.wrapArgs(record.globalTbl, {
+			'System': this
+		});
+
 		this.latestRecord = record;
 
 		try {
-			const wrapped = globalEval(globalEnv, record.sourceCode, record.globalTbl, {
-				'System': this
-			});
+			const compiled = globalEval(record.sourceCode);
 
 			// Call imported module.
-			wrapped();
+			compiled.apply(globalEnv, record.evalArgs);
 		} catch(err) {
 			record.loadError = err;
 		}

@@ -132,6 +132,8 @@ const empty: { [name: string]: string } = {};
 /** Partial WhatWG fetch implementation for script loaders. */
 
 export function fetch(uri: string, options?: { method?: string }) {
+	console.log('FETCH', options && options.method, uri);
+
 	const result = isNode ? (
 		nodeRequest(uri, options).then(({ text, uri, headers }) => new FetchResponse(
 			uri,

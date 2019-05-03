@@ -1,6 +1,9 @@
 export class Package {
 
-	constructor(public root: string) {}
+	constructor(
+		public name: string,
+		public root: string
+	) {}
 
 	version: string;
 	main?: string;

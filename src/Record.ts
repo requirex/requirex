@@ -1,18 +1,21 @@
 import { ModuleType } from './Module';
+import { Package } from './Package';
 import { Loader } from './Loader';
 
-export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'esm' | 'ts' | 'd.ts' | 'node';
+export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'esm' | 'ts' | 'tsx' | 'd.ts' | 'node';
 
 export type ModuleFactory = (...args: any[]) => any;
 
 export interface DepRef {
-	baseKey?: string;
+	/** True if dependency will be imported after resolving.
+	  * Existance checks can also load the file to save data transfers. */
 	isImport?: boolean;
-	// importKey?: string;
-	packageName?: string;
+	/** Name of referenced but not yet fetched package. */
+	pendingPackageName?: string;
 	defaultExt?: string;
 	module?: ModuleType;
 	record?: Record;
+	package?: Package;
 	format?: string;
 	sourceCode?: string;
 }
@@ -24,7 +27,8 @@ export class Record {
 		/** Resolved module name. */
 		public resolvedKey: string,
 		/** Unresolved name used in import. */
-		public importKey?: string
+		public importKey?: string,
+		public pkg?: Package
 	) {}
 
 	addDep(key: string) {
@@ -33,8 +37,39 @@ export class Record {
 		return(num);
 	}
 
+	addBundled(child: Record) {
+		child.parentBundle = this;
+		(this.bundleChildren || (this.bundleChildren = [])).push(child);
+		return(child);
+	}
+
 	resolveDep(key: string, ref: DepRef) {
 		this.depTbl[key] = ref;
+	}
+
+	wrapArgs(...defs: { [name: string]: any }[]) {
+		const argNames: string[] = [];
+		const args: { [name: string]: any } = {};
+
+		for(let def of defs) {
+			for(let name in def) {
+				if(def.hasOwnProperty(name)) {
+					argNames.push(name);
+					args[name] = def[name];
+				}
+			}
+		}
+
+		argNames.sort();
+
+		this.sourceCode = this.sourceCode && (
+			'(function(' + argNames.join(', ') + ') {\n' +
+			this.sourceCode +
+			// Break possible source map comment on the last line.
+			'\n})'
+		);
+
+		this.evalArgs = argNames.map((name: string) => args[name]);
 	}
 
 	/** Autodetected or configured format of the module. */
@@ -42,6 +77,9 @@ export class Record {
 
 	// formatBlacklist: { [format: ModuleFormat]: boolean } = {};
 	formatBlacklist: { [format: string]: boolean } = {};
+
+	parentBundle?: Record;
+	bundleChildren?: Record[];
 
 	/** Module object accessible from inside its code.
 	  * Must be set in the translate step to support circular dependencies. */
@@ -67,7 +105,13 @@ export class Record {
 
 	/** Fetched and translated source code. */
 	sourceCode: string;
+	/** Source code wrapped and compiled into an executable function. */
+	compiled: ModuleFactory;
 	factory: ModuleFactory;
+	evalArgs: any[];
+
+	/** Index within bundle if applicable. */
+	num?: number;
 
 	/** Promise resolved after discovery or rejected with a load error. */
 	discovered?: Promise<void>;

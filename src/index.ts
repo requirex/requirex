@@ -1,5 +1,6 @@
 import { globalEnv } from './platform';
 import { Loader } from './Loader';
+import { LoaderConfig } from './LoaderBase';
 
 import { JS } from './plugin/JS';
 import { AMD } from './plugin/AMD';
@@ -15,6 +16,7 @@ import { NodeResolve } from './plugin/NodeResolve';
 import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
 
+export { LoaderConfig };
 export { URL, fetch, FetchResponse, Loader };
 
 const internals = {
@@ -23,8 +25,9 @@ const internals = {
 
 /** This module, importable from code running inside. */
 const requirex = internals as typeof internals & { System: Loader };
+const globalSystem = globalEnv.System;
 
-export const System = new Loader({ 
+export const System = new Loader({
 	plugins: {
 		resolve: NodeResolve.prototype,
 
@@ -34,11 +37,12 @@ export const System = new Loader({
 		system: Register.prototype,
 		esm: TS.prototype,
 		ts: TS.prototype,
+		tsx: TS.prototype,
 		'd.ts': TS.prototype,
 		css: CSS.prototype,
 		txt: Text.prototype,
 		json: Json.prototype,
-		node: NodeBuiltin.prototype        
+		node: NodeBuiltin.prototype
 	},
 	registry: {
 		'@empty': {},
@@ -48,4 +52,4 @@ export const System = new Loader({
 
 requirex.System = System;
 
-if(!globalEnv.System) globalEnv.System = System;
+if(!globalSystem) globalEnv.System = System;
