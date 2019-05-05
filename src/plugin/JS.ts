@@ -48,11 +48,17 @@ const reHashBang = /^\ufeff?#![^\r\n]*/;
 
 interface TranslateState {
 
+	/** String of code to parse. */
+	text: string;
+
 	/** Import record for code to translate. */
 	record: Record;
 
 	/** Nesting depth inside curly brace delimited blocks. */
 	depth: number;
+
+	last?: number;
+	pos?: number;
 
 }
 
@@ -67,7 +73,6 @@ function skipRegExp(text: string, pos: number) {
 	const len = text.length;
 	/** Flag whether current char is inside a character class. */
 	let inClass = false;
-const orig = pos;
 
 	while(pos < len) {
 		switch(text.charAt(++pos)) {
@@ -99,64 +104,161 @@ const orig = pos;
 	return(-1);
 }
 
-/** Check if the keyword usage is specific to a module format.
+function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
+	const err = 'Parse error';
+	const text = state.text;
+	let depth = state.depth;
+	let match: RegExpExecArray | null;
+	/** Latest matched token. */
+	let token: string;
+	let last: number;
+	let pos: number;
+
+	// Loop through all interesting tokens in the input string.
+	while((match = reToken.exec(text))) {
+		token = match[0];
+		last = match.index;
+
+		switch(token) {
+			case '(': case '{': case '[':
+
+				++depth;
+				continue;
+
+			case ')': case '}': case ']':
+
+				--depth;
+				continue;
+
+			case '//':
+			case '/*':
+
+				// Skip a comment. Find and jump past the end token.
+				token = (token == '//') ? '\n' : '*/';
+				last = text.indexOf(token, last + 2);
+
+				if(last < 0) {
+					if(token == '\n') return;
+
+					// Unterminated comments are errors.
+					throw(new Error(err));
+				}
+
+				break;
+
+			case '/':
+
+				// Test if the slash begins a regular expression.
+				pos = Math.max(last - chunkSize, 0);
+
+				if(!reBeforeRegExp.test(text.substr(pos, last - pos))) {
+					continue;
+				}
+
+				last = skipRegExp(text, last);
+
+				// Unterminated regular expressions are errors.
+				if(last < 0) {
+					throw(new Error(err));
+				}
+
+				break;
+
+			case '"': case "'": case '`':
+
+				// Skip a string.
+				do {
+					// Look for a matching quote.
+					last = text.indexOf(token, last + 1);
+
+					// Unterminated strings are errors.
+					if(last < 0) {
+						throw(new Error(err));
+					}
+
+					// Count leading backslashes. An odd number escapes the quote.
+					pos = last;
+					while(text.charAt(--pos) == '\\') {}
+
+					// Loop until a matching unescaped quote is found.
+				} while(!(last - pos & 1))
+
+				break;
+
+			default:
+
+				// Handle matched keywords. Examine what follows them.
+				pos = last + token.length;
+
+				// Ensure token is not part of a longer token (surrounding
+				// characters are invalid in keyword and identifier names).
+				if(
+					(sep[text.charAt(last - 1)] || !last) &&
+					(sep[text.charAt(pos)] || pos >= text.length)
+				) {
+					state.depth = depth;
+					state.last = last;
+					state.pos = pos;
+					handler(token, state);
+				}
+
+				continue;
+		}
+
+		// Jump ahead in input string if a comment, string or regexp was skipped.
+		reToken.lastIndex = last + token.length;
+	}
+}
+
+const formatTbl: { [token: string]: [
+	/** Module format suggested by the token. */
+	ModuleFormat,
+	/** Flag whether detection is certain enough to stop parsing. */
+	boolean,
+	/** Immediately following content must match to trigger detection. */
+	RegExp,
+	/** Immediately preceding content must NOT match or format is blacklisted for this file! */
+	RegExp | null
+] } = {
+	// AMD modules contain calls to the define function.
+	'define': [ 'amd', true, reCallLiteral, reSet ],
+	'System': [ 'system', true, reRegister, reSet ],
+	// require suggests CommonJS, but AMD also supports require()
+	// so keep trying to detect module type.
+	'require': [ 'cjs', false, reCallString, null ],
+	// CommonJS modules use exports or module.exports.
+	// AMD may use them, but a surrounding define should come first.
+	'module': [ 'cjs', true, reModuleExports, null ],
+	'exports': [ 'cjs', true, reExports, null ]
+};
+
+/** Check if keyword presence indicates a specific module format.
   *
   * @param token Keyword to analyze.
-  * @param chunk Some input immediately after the token, for quickly testing
-  * regexp matches at the specific location.
   * @return True if module format was detected, false otherwise. */
 
-function guessFormat(token: string, text: string, last: number, pos: number, state: TranslateState) {
-	const chunkAfter = text.substr(pos, chunkSize);
+function guessFormat(token: string, state: TranslateState) {
+	const format = formatTbl[token];
 
-	if(token == 'define' && !state.record.formatBlacklist['amd']) {
+	if(format && !state.record.formatBlacklist[format[0]]) {
+		const text = state.text;
+		const last = state.last!;
 		const len = Math.min(last, chunkSize);
+		// Get some input immediately before and after the token,
+		// for quickly testing regexp matches.
+		const chunkAfter = text.substr(state.pos!, chunkSize);
 		const chunkBefore = text.substr(last - len, len);
 
-		if(reSet.test(chunkBefore)) {
-			// Redefining the define function makes known AMD usage unlikely.
-			state.record.formatBlacklist['amd'] = true;
+		if(format[3] && format[3]!.test(text.substr(last - len, len))) {
+			// Redefining the module syntax makes known usage patterns unlikely.
+			state.record.formatBlacklist[format[0]] = true;
 			return(false);
 		}
 
-		if(reCallLiteral.test(chunkAfter)) {
-			// AMD modules contain calls to the define function.
-			state.record.format = 'amd';
-			return(true);
+		if(format[2].test(chunkAfter)) {
+			state.record.format = format[0];
+			return(format[1]);
 		}
-	}
-
-	if(token == 'System' && !state.record.formatBlacklist['system']) {
-		const len = Math.min(last, chunkSize);
-		const chunkBefore = text.substr(last - len, len);
-
-		if(reSet.test(chunkBefore)) {
-			// Redefining the System variable makes known System.register usage unlikely.
-			state.record.formatBlacklist['system'] = true;
-			return(false);
-		}
-
-		if(reRegister.test(chunkAfter)) {
-			state.record.format = 'system';
-			return(true);
-		}
-	}
-
-	if(token == 'require' && reCallString.test(chunkAfter)) {
-		// CommonJS is likely, but AMD also supports require()
-		// so keep trying to detect module type.
-		state.record.format = 'cjs';
-		return(false);
-	}
-
-	if(
-		(token == 'module' && reModuleExports.test(chunkAfter)) ||
-		(token == 'exports' && reExports.test(chunkAfter))
-	) {
-		// CommonJS modules use exports or module.exports.
-		// AMD may use them, but a surrounding define should come first.
-		state.record.format = 'cjs';
-		return(true);
 	}
 
 	if((token == 'import' || token == 'export') && !state.depth) {
@@ -172,24 +274,11 @@ function guessFormat(token: string, text: string, last: number, pos: number, sta
 export class JS extends Loader {
 
 	/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
-	 * Optimized for speed. */
+	  * Optimized for speed. */
 
 	discover(record: Record) {
-		const err = 'Parse error';
-
 		/** Match string or comment start tokens, curly braces and some keywords. */
-		let reToken = matchTokens('module|require|define|System|import|exports?');
-
-		let last: number;
-		let pos: number;
-
-		/** Latest matched token. */
-		let token: string;
-
-		let state: TranslateState = {
-			record,
-			depth: 0
-		};
+		let reToken = matchTokens('module|require|define|System|import|exports?|NODE_ENV');
 
 		/** Finished trying to detect the module format? */
 		let formatKnown = false;
@@ -197,137 +286,43 @@ export class JS extends Loader {
 		/** CommonJS style require call. Name can be remapped if used inside AMD. */
 		let requireToken = 'require';
 
-		let chunkBefore: string;
-		let chunkAfter: string;
-
-		let text = record.sourceCode;
-
 		// Check for a hashbang header line.
-		let match = reHashBang.exec(text);
+		let match = reHashBang.exec(record.sourceCode);
 
 		if(match) {
 			// Remove the header.
-			text = text.substr(match[0].length);
-			record.sourceCode = text;
+			record.sourceCode = record.sourceCode.substr(match[0].length);
 
 			// Anything meant to run as a script is probably CommonJS,
 			// but keep trying to detect module type anyway.
 			if(!formatKnown) record.format = 'cjs';
 		}
 
-		// Loop through all interesting tokens in the input string.
-		while((match = reToken.exec(text))) {
-			token = match[0];
-			last = match.index;
+		const state: TranslateState = {
+			text: record.sourceCode,
+			record,
+			depth: 0
+		};
 
-			switch(token) {
-				case '{':
-
-					// Track nesting to detect top-level import / export.
-					++state.depth;
-					continue;
-
-				case '}':
-
-					--state.depth;
-					continue;
-
-				case '//':
-				case '/*':
-
-					// Skip a comment. Find and jump past the end token.
-					token = (token == '//') ? '\n' : '*/';
-					last = text.indexOf(token, last + 2);
-
-					if(last < 0) {
-						if(token == '\n') return;
-
-						// Unterminated comments are errors.
-						throw(new Error(err));
-					}
-
-					break;
-
-				case '/':
-
-					// Test if the slash begins a regular expression.
-					pos = Math.max(last - chunkSize, 0);
-					chunkBefore = text.substr(pos, last - pos);
-
-					if(!reBeforeRegExp.test(chunkBefore)) {
-						continue;
-					}
-
-					last = skipRegExp(text, last);
-
-					// Unterminated regular expressions are errors.
-					if(last < 0) {
-						throw(new Error(err));
-					}
-
-					break;
-
-				case '"':
-				case "'":
-				case '`':
-
-					// Skip a string.
-					do {
-						// Look for a matching quote.
-						last = text.indexOf(token, last + 1);
-
-						// Unterminated strings are errors.
-						if(last < 0) {
-							throw(new Error(err));
-						}
-
-						// Count leading backslashes. An odd number escapes the quote.
-						pos = last;
-						while(text.charAt(--pos) == '\\') {}
-
-						// Loop until a matching unescaped quote is found.
-					} while(!(last - pos & 1))
-
-					break;
-
-				default:
-
-					// Handle matched keywords. Examine what follows them.
-					pos = last + token.length;
-
-					// Ensure token is not part of a longer token (surrounding
-					// characters are invalid in keyword and identifier names).
-					if(
-						(last > 0 && !sep[text.charAt(last - 1)]) ||
-						(pos < text.length - 1 && !sep[text.charAt(pos)])
-					) {
-						continue;
-					}
-
-					if(!formatKnown) {
-						formatKnown = guessFormat(token, text, last, pos, state);
-					}
-
-					if(
-						token == requireToken &&
-						(state.record.format == 'amd' || state.record.format == 'cjs')
-					) {
-						chunkAfter = text.substr(pos, chunkSize);
-
-						match = reCallString.exec(chunkAfter);
-
-						if(match && match[1] == match[3]) {
-							// Called with a string surrounded in matching quotations.
-							record.addDep(match[2]);
-						}
-					}
-
-					continue;
+		parseSyntax(reToken, state, (token: string, state: TranslateState) => {
+			if(!formatKnown) {
+				formatKnown = guessFormat(token, state);
 			}
 
-			// Jump ahead in input string if a comment, string or regexp was skipped.
-			reToken.lastIndex = last + token.length;
-		}
+			if(
+				token == requireToken &&
+				(state.record.format == 'amd' || state.record.format == 'cjs')
+			) {
+				const chunkAfter = state.text.substr(state.pos!, chunkSize);
+
+				match = reCallString.exec(chunkAfter);
+
+				if(match && match[1] == match[3]) {
+					// Called with a string surrounded in matching quotations.
+					record.addDep(match[2]);
+				}
+			}
+		});
 	}
 
 }
