@@ -124,15 +124,18 @@ function parseFetchedPackage(
 	let redirKey: string;
 
 	const parsed = fetched.then((res: FetchResponse) => {
-		redirKey = res.url;
+		redirKey = getDir(res.url);
 		return(res.text());
 	}).then((data: string) => {
-		const pkg = parsePackage(getDir(redirKey), data, name)
+		const pkg = parsePackage(redirKey, data, name)
 		loader.packageConfTbl[rootKey] = pkg;
-		loader.packageConfTbl[pkg.root] = pkg;
+		loader.packageConfTbl[redirKey] = pkg;
 		loader.packageRootTbl[rootKey] = pkg;
-		loader.packageRootTbl[pkg.root] = pkg;
+		loader.packageRootTbl[redirKey] = pkg;
 		return(pkg);
+	}).catch(() => {
+		loader.packageConfTbl[rootKey] = false;
+		return(Promise.reject(false));
 	});
 
 	loader.packageConfTbl[rootKey] = parsed;
@@ -151,9 +154,10 @@ function fetchPackage(
 
 	let parsed = loader.packageConfTbl[repoKey + name];
 
-	if(!parsed) {
+	if(parsed === false) {
+		parsed = Promise.reject(parsed);
+	} else if(!parsed) {
 		const jsonKey = repoKey + name + '/package.json';
-
 		const fetched = repo.preferred ? fetch(jsonKey) : ifExists(jsonKey).then((key: string) => {
 			// A repository was found so look for additional packages there
 			// before other addresses.
@@ -172,7 +176,9 @@ function fetchPackage(
 function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string | undefined) {
 	let parsed = loader.packageConfTbl[key];
 
-	if(!parsed) {
+	if(parsed === false) {
+		parsed = Promise.reject(parsed);
+	} else if(!parsed) {
 		parsed = parseFetchedPackage(loader, key, loader.fetch(key + '/package.json'));
 	} else if(parsed instanceof Package) {
 		loader.packageRootTbl[key] = parsed;
