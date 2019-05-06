@@ -282,6 +282,13 @@ export class Loader {
 		const format = record.format;
 		const plugin = this.plugins[format!];
 
+		record.globalTbl = {
+			'process': {
+				'cwd': () => this.cwd,
+				'env': { 'NODE_ENV': 'production' }
+			}
+		};
+
 		if(plugin && plugin.discover) {
 			return(
 				Promise.resolve(
@@ -296,13 +303,6 @@ export class Loader {
 	translate(record: Record): Promise<void> | void {
 		const format = record.format;
 		const plugin = this.plugins[format!];
-
-		record.globalTbl = {
-			'process': {
-				'cwd': () => this.cwd,
-				'env': { 'NODE_ENV': 'production' }
-			}
-		};
 
 		if(plugin && plugin.translate) {
 			return(
