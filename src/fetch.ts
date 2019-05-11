@@ -11,10 +11,10 @@ export class FetchResponse {
 		public url: string,
 		private data: string,
 		private getHeader: (name: string) => string | null | undefined
-	) {}
+	) { }
 
 	text() {
-		return(Promise.resolve(this.data));
+		return Promise.resolve(this.data);
 	}
 
 	ok: boolean;
@@ -45,7 +45,7 @@ export function nodeRequest(uri: string, options?: HTTP.RequestOptions, ttl = 3)
 		uri
 	};
 
-	const result = new Promise((
+	return new Promise((
 		resolve: (result: NodeResponse | Promise<NodeResponse>) => void,
 		reject: (err: any) => void
 	) => {
@@ -59,23 +59,23 @@ export function nodeRequest(uri: string, options?: HTTP.RequestOptions, ttl = 3)
 			const path = URL.toLocal(uri);
 
 			if(isHead) {
-				return(fs.stat(
+				return fs.stat(
 					path,
 					(err: NodeJS.ErrnoException | null, stat: FS.Stats) => (
 						err ? reject(err) : resolve(response)
 					)
-				));
+				);
 			} else {
-				return(fs.readFile(
+				return fs.readFile(
 					path,
 					'utf-8',
 					(err: NodeJS.ErrnoException | null, text: string) => (
 						err ? reject(err) : (response.text = text, resolve(response))
 					)
-				));
+				);
 			}
 		} else if(proto != 'http' && proto != 'https') {
-			return(reject(new Error('Unsupported protocol ' + proto)));
+			return reject(new Error('Unsupported protocol ' + proto));
 		}
 
 		const http: typeof HTTP = nodeRequire(proto);
@@ -93,7 +93,7 @@ export function nodeRequest(uri: string, options?: HTTP.RequestOptions, ttl = 3)
 
 				if(isHead) {
 					req.abort();
-					return(resolve(response));
+					return resolve(response);
 				}
 
 				const chunkList: Buffer[] = [];
@@ -106,15 +106,15 @@ export function nodeRequest(uri: string, options?: HTTP.RequestOptions, ttl = 3)
 				});
 			} else if(!res.statusCode || !redirectCodes[res.statusCode]) {
 				req.abort();
-				return(reject(new Error(
+				return reject(new Error(
 					res.statusCode + ' ' + res.statusMessage +
 					'\n    fetching ' + uri
-				)));
+				));
 			} else {
 				const next = res.headers.location;
 
 				req.abort();
-				if(!next) return(reject(res));
+				if(!next) return reject(res);
 
 				resolve(nodeRequest(URL.resolve(uri, next), options, ttl - 1));
 			}
@@ -123,8 +123,6 @@ export function nodeRequest(uri: string, options?: HTTP.RequestOptions, ttl = 3)
 		req.on('error', reject);
 		req.end();
 	});
-
-	return(result);
 }
 
 const empty: { [name: string]: string } = {};
@@ -134,13 +132,15 @@ const empty: { [name: string]: string } = {};
 export function fetch(uri: string, options?: { method?: string }) {
 	console.log('FETCH', options && options.method, uri);
 
-	const result = isNode ? (
+	return isNode ? (
 		nodeRequest(uri, options).then(({ text, uri, headers }) => new FetchResponse(
 			uri,
 			text,
 			(name: string) => {
 				const value = (headers || empty)[name.toLowerCase()];
-				return(value && (typeof(value) == 'string' ? value : value.join(',')));
+				return value && (
+					typeof (value) == 'string' ? value : value.join(',')
+				);
 			}
 		))
 	) : new Promise(
@@ -169,6 +169,4 @@ export function fetch(uri: string, options?: { method?: string }) {
 			xhr.send();
 		}
 	);
-
-	return(result);
 }

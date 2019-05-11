@@ -14,15 +14,15 @@ export class CJS extends Loader {
 			(key: string) => {
 				const ref = record.depTbl[key];
 				if(ref) {
-					return(ref.module ? ref.module.exports : this.instantiate(ref.record!))
+					return ref.module ? ref.module.exports : this.instantiate(ref.record!);
 				}
 
 				const resolvedKey = this.resolveSync(key, record.resolvedKey);
 				const moduleObj = this.registry[resolvedKey];
 
-				return(moduleObj.exports);
+				return moduleObj.exports;
 			}
-		 ) as any;
+		) as any;
 
 		// TODO: maybe support cjsRequire.resolve.paths()
 		cjsRequire.resolve = (
@@ -63,7 +63,7 @@ export class CJS extends Loader {
 				compiled = globalEval(record.sourceCode);
 			} catch(err) {
 				record.loadError = err;
-				throw(err);
+				throw err;
 			}
 		}
 
@@ -84,13 +84,13 @@ export class CJS extends Loader {
 		// Restore AMD functionality.
 		globalEnv.define = define;
 
-		if(error) throw(error);
+		if(error) throw error;
 
-		return(moduleInternal.exports);
+		return moduleInternal.exports;
 	}
 
 	wrap(record: Record) {
-		return(record.sourceCode);
+		return record.sourceCode;
 	}
 
 }

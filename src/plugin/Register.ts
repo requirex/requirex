@@ -55,7 +55,7 @@ export class Register extends Loader {
 
 		if(spec.execute) spec.execute();
 
-		return(record.moduleInternal.exports);
+		return record.moduleInternal.exports;
 	}
 
 }

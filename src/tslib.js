@@ -1,1 +1,1 @@
-export function __extends(obj, parent) {}
+export function __extends(obj, parent) { }

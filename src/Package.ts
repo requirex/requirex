@@ -3,7 +3,7 @@ export class Package {
 	constructor(
 		public name: string,
 		public root: string
-	) {}
+	) { }
 
 	version: string;
 	main?: string;

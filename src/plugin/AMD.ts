@@ -21,7 +21,7 @@ export class AMD extends Loader {
 		factory?: ModuleFactory
 	) {
 		// Handle omitted first argument.
-		if(typeof(key) != 'string') {
+		if(typeof key != 'string') {
 			factory = deps as ModuleFactory;
 			deps = key;
 			key = void 0;
@@ -33,7 +33,7 @@ export class AMD extends Loader {
 			deps = void 0;
 		}
 
-		if(typeof(factory) != 'function') {
+		if(typeof factory != 'function') {
 			const value = factory;
 			factory = () => value;
 		}
@@ -76,7 +76,7 @@ export class AMD extends Loader {
 		} else {
 			// If no deps are given, pass the AMD internals in standard order
 			// to the factory function.
-			record.depNumList = [ 0, 1, 2 ];
+			record.depNumList = [0, 1, 2];
 		}
 
 		// Disallow redefining a module.
@@ -102,12 +102,12 @@ export class AMD extends Loader {
 			referer = referer.resolvedKey;
 		}
 
-		if(typeof(names) == 'object' && !(names instanceof Array)) {
+		if(typeof names == 'object' && !(names instanceof Array)) {
 			// First argument was a config object, remove it.
-			return(amdRequire.apply(null, Array.prototype.slice.call(arguments, 1)));
-		} else if(typeof(resolve) == 'function') {
+			return amdRequire.apply(null, Array.prototype.slice.call(arguments, 1));
+		} else if(typeof resolve == 'function') {
 			// Asynchronous require().
-			if(typeof(names) == 'string') names = [ names ];
+			if(typeof names == 'string') names = [names];
 
 			Promise.all(
 				names.map((key) => loader.import(key, referer as string | undefined))
@@ -115,12 +115,14 @@ export class AMD extends Loader {
 				((imports: any[]) => resolve.apply(null, imports)),
 				reject
 			);
-		} else if(typeof(names) == 'string') {
+		} else if(typeof names == 'string') {
 			// Synchronous require().
 			if(record) {
 				const ref = record.depTbl[names];
 				if(ref) {
-					return(ref.module ? ref.module.exports : record.loader.instantiate(ref.record!));
+					return ref.module ? ref.module.exports : (
+						record.loader.instantiate(ref.record!)
+					);
 				}
 			}
 
@@ -128,16 +130,16 @@ export class AMD extends Loader {
 			const moduleObj = loader.registry[resolvedKey];
 
 			if(!moduleObj) {
-				throw(new Error(
+				throw new Error(
 					'Module not already loaded loading "' + names +
 					'" as "' + resolvedKey + '"' +
 					(!referer ? '.' : ' from "' + referer + '".')
-				));
+				);
 			}
 
-			return(moduleObj.exports);
+			return moduleObj.exports;
 		} else {
-			throw(new TypeError('Invalid require'));
+			throw new TypeError('Invalid require');
 		}
 	})(this);
 
@@ -145,7 +147,7 @@ export class AMD extends Loader {
 		const exports = {};
 
 		record.moduleInternal = {
-			config: () => {},
+			config: () => { },
 			exports,
 			id: record.resolvedKey,
 			uri: record.resolvedKey
@@ -195,7 +197,7 @@ export class AMD extends Loader {
 			reject?: (err: any) => any,
 			referer?: string
 		) {
-			return(self.amdRequire(names, resolve, reject, referer || record));
+			return self.amdRequire(names, resolve, reject, referer || record);
 		}
 
 		// Order must match internalDeps in amdDefine.
@@ -208,10 +210,10 @@ export class AMD extends Loader {
 		const args = record.depNumList.map((num) => {
 			const dep = deps[num];
 			// Return internal deps as-is.
-			if(num < 3) return(dep);
+			if(num < 3) return dep;
 
 			const ref = record.depTbl[dep];
-			return(ref.module ? ref.module.exports : this.instantiate(ref.record!));
+			return ref.module ? ref.module.exports : this.instantiate(ref.record!);
 		});
 
 		const exportsNew = record.factory.apply(null, args);
@@ -220,11 +222,11 @@ export class AMD extends Loader {
 			moduleInternal.exports = exportsNew;
 		}
 
-		return(moduleInternal.exports);
+		return moduleInternal.exports;
 	}
 
 	wrap(record: Record) {
-		return(record.sourceCode);
+		return record.sourceCode;
 	}
 
 }

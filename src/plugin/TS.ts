@@ -17,7 +17,7 @@ declare module '../Loader' {
 }
 
 function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
-	return({
+	return ({
 		getCompilationSettings: () => ({
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
@@ -45,18 +45,17 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 				}
 			}
 
-			return(keys);
+			return keys;
 		},
 		getScriptVersion: (key: string) => {
-			return('0');
+			return '0';
 		},
 		getScriptSnapshot: (key: string) => {
-			const record = loader.records[key] || loader.records[key.replace(/\.tsx?$/, '.js')];
+			const record = loader.records[key] || loader.records[key.replace(/\.tsx?$/, '.js')];
 
-			return(
-				record.tsSnapshot ||
-				(record.tsSnapshot = ts.ScriptSnapshot.fromString(record.sourceCode))
-			)
+			return record.tsSnapshot || (
+				record.tsSnapshot = ts.ScriptSnapshot.fromString(record.sourceCode)
+			);
 		},
 		getCurrentDirectory: () => '',
 		getDefaultLibFileName: () => loader.resolveSync('typescript/lib/lib.d.ts')
@@ -70,7 +69,7 @@ export class TS extends Loader {
 	// constructor(config?: LoaderConfig) {}
 
 	discover(record: Record) {
-		return(this.import('typescript').then((ts: typeof _ts) => {
+		return this.import('typescript').then((ts: typeof _ts) => {
 			if(!this.tsService) {
 				this.tsHost = createHost(this, ts);
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
@@ -80,10 +79,7 @@ export class TS extends Loader {
 
 			const info = ts.preProcessFile(record.sourceCode, true, true);
 
-			for(let ref of ([] as _ts.FileReference[]).concat(
-				info.referencedFiles,
-				info.importedFiles
-			)) {
+			for(let ref of info.referencedFiles.concat(info.importedFiles)) {
 				record.addDep(ref.fileName);
 			}
 
@@ -92,7 +88,7 @@ export class TS extends Loader {
 			}
 
 			record.addDep('typescript/lib/lib.d.ts');
-		}));
+		});
 	}
 
 	translate(record: Record) {
@@ -109,6 +105,6 @@ export class TS extends Loader {
 	}
 
 	/** Dummy instantiate for d.ts files. */
-	instantiate(record: Record) {}
+	instantiate(record: Record) { }
 
 }

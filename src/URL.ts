@@ -12,7 +12,7 @@ const knownProto: { [proto: string]: 1 } = { 'file:': 1, 'http:': 1, 'https:': 1
 export function skipSlashes(key: string, start: number, count: number) {
 	while((start = key.indexOf('/', start) + 1) && --count);
 
-	return(start);
+	return start;
 }
 
 export class URL {
@@ -31,7 +31,7 @@ export class URL {
 
 		if(!key) {
 			// Key with no server / path only replaces the query string and/or hash.
-			return(proto + baseParts[2] + (keyParts[3] || baseParts[3]) + keyParts[4]);
+			return proto + baseParts[2] + (keyParts[3] || baseParts[3]) + keyParts[4];
 		}
 
 		const suffix = keyParts[3] + keyParts[4];
@@ -56,7 +56,7 @@ export class URL {
 		} else if(keyParts[1] && !knownProto[keyParts[1]] && key.charAt(0) != '.') {
 			// Weird protocols followed by neither explicitly absolute nor
 			// relative paths are used as-is, ignoring the base path.
-			return(keyParts[1] + key + suffix);
+			return keyParts[1] + key + suffix;
 		}
 
 		let slash = base.lastIndexOf('/') + 1;
@@ -88,7 +88,7 @@ export class URL {
 		// Ensure server names have a final slash.
 		if(knownProto[proto] && hasServer && base.lastIndexOf('/') < 2) base += '/';
 
-		return(proto + base + suffix);
+		return proto + base + suffix;
 	}
 
 	static common(a: string, b: string) {
@@ -106,14 +106,14 @@ export class URL {
 			pos = next;
 		}
 
-		return(pos);
+		return pos;
 	}
 
 	static relative(base: string, key: string) {
 		const start = URL.common(base, key);
 		const pathOffset = skipSlashes(base, 0, 3);
 
-		if(!pathOffset || pathOffset > start) return(key);
+		if(!pathOffset || pathOffset > start) return key;
 
 		let pos = start;
 		let next: number;
@@ -124,7 +124,7 @@ export class URL {
 			pos = next;
 		}
 
-		return(prefix + key.substr(start));
+		return prefix + key.substr(start);
 	}
 
 	static fromLocal(local: string) {
@@ -135,7 +135,7 @@ export class URL {
 			key = key.replace(/\\/g, '/').replace(/^([0-9A-Za-z]+:\/)/, '/$1');
 		}
 
-		return(key.replace(/^\//, 'file:///'));
+		return key.replace(/^\//, 'file:///');
 	}
 
 	static toLocal(key: string) {
@@ -146,7 +146,7 @@ export class URL {
 			local = local.replace(/^\/([0-9A-Za-z]+:\/)/, '$1').replace(/\//g, '\\');
 		}
 
-		return(local);
+		return local;
 	}
 
 }

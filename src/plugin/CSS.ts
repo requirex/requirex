@@ -8,7 +8,7 @@ export class CSS extends Loader {
 	// constructor(config?: LoaderConfig) {}
 
 	instantiate(record: Record) {
-		if(typeof(document) != 'object' || !document.createElement) return;
+		if(typeof document != 'object' || !document.createElement) return;
 		const head = document.getElementsByTagName('head')[0];
 
 		// Inject as a style element if transpiled.

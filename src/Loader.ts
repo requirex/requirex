@@ -15,7 +15,7 @@ export interface BuiltSpec {
 	root: string;
 	main: string;
 	map: { [key: string]: string };
-	files: [ string, ModuleFormat, { [importKey: string]: number }, any ][];
+	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
 }
 
 function handleExtension(loader: Loader, key: string, ref?: DepRef) {
@@ -38,7 +38,7 @@ function handleExtension(loader: Loader, key: string, ref?: DepRef) {
 
 	if(ref) ref.format = format;
 
-	return(key);
+	return key;
 }
 
 function fetchTranslate(loader: Loader, instantiate: true, importKey: string, parent?: string): Promise<any>;
@@ -77,7 +77,7 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		)
 	);
 
-	return(result);
+	return result;
 }
 
 export class Loader {
@@ -97,7 +97,7 @@ export class Loader {
 			origin + this.cwd + (this.cwd == '/' ? '' : '/')
 		);
 
-		const registry = config.registry || {};
+		const registry = config.registry || {};
 
 		for(let name in registry) {
 			if(registry.hasOwnProperty(name)) {
@@ -105,7 +105,7 @@ export class Loader {
 			}
 		}
 
-		const plugins = config.plugins || {};
+		const plugins = config.plugins || {};
 
 		for(let name in plugins) {
 			if(plugins.hasOwnProperty(name)) {
@@ -119,7 +119,7 @@ export class Loader {
 	  * @param parent Resolved URL of a possible parent module. */
 
 	import(importKey: string, parent?: string) {
-		return(fetchTranslate(this, true, importKey, parent));
+		return fetchTranslate(this, true, importKey, parent);
 	}
 
 	getPackage(key: string) {
@@ -128,7 +128,7 @@ export class Loader {
 		while((end = key.lastIndexOf('/', end - 1)) >= 0) {
 			const pkg = this.packageRootTbl[key.substr(0, end)];
 
-			if(pkg && pkg instanceof Package) return(pkg);
+			if(pkg && pkg instanceof Package) return pkg;
 		}
 	}
 
@@ -140,8 +140,8 @@ export class Loader {
 		ref.pendingPackageName = void 0;
 		ref.package = void 0;
 
-		let resolvedKey: string = (
-			plugin ? plugin.resolveSync.call(this, key, callerKey, ref) :
+		let resolvedKey: string = (plugin ?
+			plugin.resolveSync.call(this, key, callerKey, ref) :
 			URL.resolve(callerKey, key)
 		);
 
@@ -149,21 +149,21 @@ export class Loader {
 			resolvedKey = handleExtension(this, resolvedKey, ref);
 		}
 
-		return(resolvedKey);
+		return resolvedKey;
 	}
 
 	resolve(key: string, callerKey?: string, ref?: DepRef): Promise<string> {
 		const plugin = this.plugins.resolve;
 		callerKey = callerKey || this.baseURL || '';
 
-		return(
-			plugin ? plugin.resolve.call(this, key, callerKey, ref) :
+		return (plugin ?
+			plugin.resolve.call(this, key, callerKey, ref) :
 			Promise.resolve(this.resolveSync(key, callerKey, ref))
 		);
 	}
 
 	fetch(url: string) {
-		return(fetch(url));
+		return fetch(url);
 	}
 
 	fetchRecord(record: Record) {
@@ -173,7 +173,7 @@ export class Loader {
 			record.sourceCode = text;
 		});
 
-		return(fetched);
+		return fetched;
 	}
 
 	/** Resolve and translate an imported dependency and its recursive dependencies.
@@ -209,13 +209,13 @@ export class Loader {
 			}
 
 			record.resolveDep(importKey, ref);
-			return(result);
+			return result;
 		}).catch((err: NodeJS.ErrnoException) => {
 			err.message += '\n    importing ' + importKey + ' from ' + record.resolvedKey;
-			throw(err);
+			throw err;
 		});
 
-		return(discovered);
+		return discovered;
 	}
 
 	/** Recursively fetch and translate a file and all its dependencies.
@@ -262,20 +262,20 @@ export class Loader {
 				() => this.discover(record)
 			).catch((err: NodeJS.ErrnoException) => {
 				err.message += '\n    translating ' + record.resolvedKey;
-				throw(err);
+				throw err;
 			});
 		}
 
 		// Store import record in table and wait for it to be translated.
 		ref.record = record;
 
-		return(record.discovered.then(
+		return record.discovered.then(
 			// Loop through all imported dependencies.
 			() => Promise.all(record.depList.map(
 				// Resolve and translate each dependency.
 				(key: string) => this.discoverImport(key, record, instantiate, base!)
 			)).then(() => base!)
-		));
+		);
 	}
 
 	discover(record: Record): Promise<void> | void {
@@ -290,30 +290,30 @@ export class Loader {
 		};
 
 		if(plugin && plugin.discover) {
-			return(
-				Promise.resolve(
-					plugin.discover.call(this, record)
-				).then(() => {
-					if(record.format != format) return(this.discover(record));
-				})
-			);
+			return Promise.resolve(
+				plugin.discover.call(this, record)
+			).then(() => {
+				if(record.format != format) return this.discover(record);
+			});
 		}
 	}
 
-	translate(record: Record): Promise<void> | void {
+	translate(record: Record): Promise<void> | void {
 		const format = record.format;
 		const plugin = this.plugins[format!];
 
 		if(plugin && plugin.translate) {
-			return(
-				Promise.resolve(
-					plugin.translate.call(this, record)
-				).then(() => {
-					if(record.format != format) return(
-						Promise.resolve(this.discover(record)).then(() => this.translate(record))
+			return Promise.resolve(
+				plugin.translate.call(this, record)
+			).then(() => {
+				if(record.format != format) {
+					return Promise.resolve(
+						this.discover(record)
+					).then(
+						() => this.translate(record)
 					);
-				})
-			);
+				}
+			});
 		} else if(!record.moduleInternal) {
 			record.moduleInternal = {
 				exports: {},
@@ -324,13 +324,13 @@ export class Loader {
 
 	instantiate(record: Record) {
 		if(record.isInstantiated) {
-			return(record.moduleInternal.exports);
+			return record.moduleInternal.exports;
 		}
 
 		record.isInstantiated = true;
 
 		if(record.loadError) {
-			throw(record.loadError);
+			throw record.loadError;
 		}
 
 		try {
@@ -344,10 +344,10 @@ export class Loader {
 				// or at least copy them over...
 			}
 
-			return(exportsNew);
+			return exportsNew;
 		} catch(err) {
 			err.message += '\n    instantiating ' + record.resolvedKey;
-			throw(err);
+			throw err;
 		}
 	}
 
@@ -363,10 +363,10 @@ export class Loader {
 		}
 	}
 
-	wrap(record: Record) {}
+	wrap(record: Record) { }
 
 	build(importKey: string, parent?: string) {
-		return(fetchTranslate(this, false, importKey, parent).then((record: Record) => {
+		return fetchTranslate(this, false, importKey, parent).then((record: Record) => {
 			const pkgTbl: { [name: string]: { package: Package, records: Record[] } } = {};
 			const pkgList: string[] = [];
 
@@ -396,10 +396,10 @@ export class Loader {
 
 			const str = JSON.stringify;
 
-			return('System.built(1,[{\n\t' + pkgList.map((name: string) => {
+			return 'System.built(1,[{\n\t' + pkgList.map((name: string) => {
 				const spec = pkgTbl[name];
 				const pkg = spec.package;
-				return([
+				return [
 					'name: ' + str(pkg.name),
 					'root: ' + str(pkg.root),
 					'main: ' + str(pkg.main),
@@ -419,16 +419,16 @@ export class Loader {
 							if(dep) deps.push(str(depName) + ': ' + dep.num);
 						}
 
-						return('\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
+						return '\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
 							str(URL.relative(pkg.root + '/', record.resolvedKey)),
 							str(record.format),
 							'{' + deps.join(', ') + '}',
 							code
-						].join(', '));
+						].join(', ');
 					}).join('\n\t\t], [\n') + '\n\t\t]\n\t]'
-				].join(',\n\t'));
-			}).join('\n}, {\n\t') + '\n}]);');
-		}));
+				].join(',\n\t');
+			}).join('\n}, {\n\t') + '\n}]);';
+		});
 	}
 
 	built(version: number, specList: BuiltSpec[]) {
@@ -445,7 +445,7 @@ export class Loader {
 			this.packageConfTbl[pkg.root] = pkg;
 			this.packageRootTbl[pkg.root] = pkg;
 
-			for(let [ key, format, deps, compiled ] of pkgSpec.files) {
+			for(let [key, format, deps, compiled] of pkgSpec.files) {
 				const resolvedKey = URL.resolve(pkg.root + '/', key);
 				const record = new Record(this, resolvedKey);
 

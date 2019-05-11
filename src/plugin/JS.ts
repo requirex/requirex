@@ -16,7 +16,7 @@ for(let c of '\t\n\r !"#%&\'()*+,-./:;<=>?@[\\]^`{|}~'.split('')) {
   * @param keywords Separated by pipe characters, may use regexp syntax. */
 
 function matchTokens(keywords: string) {
-	return(new RegExp('["\'`{}()]|\/[*/]?|' + keywords, 'g'));
+	return new RegExp('["\'`{}()]|\/[*/]?|' + keywords, 'g');
 }
 
 /** Match a function call with a non-numeric literal as the first argument. */
@@ -110,12 +110,12 @@ function skipRegExp(text: string, pos: number) {
 
 				// A slash terminates the regexp unless inside a character class.
 				if(!inClass) {
-					return(pos);
+					return pos;
 				}
 		}
 	}
 
-	return(-1);
+	return -1;
 }
 
 function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
@@ -163,7 +163,7 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 					if(token == '\n') return;
 
 					// Unterminated comments are errors.
-					throw(new Error(err));
+					throw new Error(err);
 				}
 
 				break;
@@ -181,7 +181,7 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 
 				// Unterminated regular expressions are errors.
 				if(last < 0) {
-					throw(new Error(err));
+					throw new Error(err);
 				}
 
 				break;
@@ -195,12 +195,12 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 
 					// Unterminated strings are errors.
 					if(last < 0) {
-						throw(new Error(err));
+						throw new Error(err);
 					}
 
 					// Count leading backslashes. An odd number escapes the quote.
 					pos = last;
-					while(text.charAt(--pos) == '\\') {}
+					while(text.charAt(--pos) == '\\') { }
 
 					// Loop until a matching unescaped quote is found.
 				} while(!(last - pos & 1))
@@ -232,27 +232,29 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 	}
 }
 
-const formatTbl: { [token: string]: [
-	/** Module format suggested by the token. */
-	ModuleFormat,
-	/** Flag whether detection is certain enough to stop parsing. */
-	boolean,
-	/** Immediately following content must match to trigger detection. */
-	RegExp,
-	/** Immediately preceding content must NOT match or format is blacklisted for this file! */
-	RegExp | null
-] } = {
+const formatTbl: {
+	[token: string]: [
+		/** Module format suggested by the token. */
+		ModuleFormat,
+		/** Flag whether detection is certain enough to stop parsing. */
+		boolean,
+		/** Immediately following content must match to trigger detection. */
+		RegExp,
+		/** Immediately preceding content must NOT match or format is blacklisted for this file! */
+		RegExp | null
+	]
+} = ({
 	// AMD modules contain calls to the define function.
-	'define': [ 'amd', true, reCallLiteral, reSet ],
-	'System': [ 'system', true, reRegister, reSet ],
+	'define': ['amd', true, reCallLiteral, reSet],
+	'System': ['system', true, reRegister, reSet],
 	// require suggests CommonJS, but AMD also supports require()
 	// so keep trying to detect module type.
-	'require': [ 'cjs', false, reCallString, null ],
+	'require': ['cjs', false, reCallString, null],
 	// CommonJS modules use exports or module.exports.
 	// AMD may use them, but a surrounding define should come first.
-	'module': [ 'cjs', true, reModuleExports, null ],
-	'exports': [ 'cjs', true, reExports, null ]
-};
+	'module': ['cjs', true, reModuleExports, null],
+	'exports': ['cjs', true, reExports, null]
+});
 
 /** Check if keyword presence indicates a specific module format.
   *
@@ -275,12 +277,12 @@ function guessFormat(token: string, state: TranslateState) {
 		if(format[3] && format[3]!.test(text.substr(last - len, len))) {
 			// Redefining the module syntax makes known usage patterns unlikely.
 			state.record.formatBlacklist[format[0]] = true;
-			return(false);
+			return false;
 		}
 
 		if(format[2].test(chunkAfter)) {
 			state.record.format = format[0];
-			return(format[1]);
+			return format[1];
 		}
 	}
 
@@ -288,10 +290,10 @@ function guessFormat(token: string, state: TranslateState) {
 		// ES modules contain import and export statements
 		// at the root level scope.
 		state.record.format = 'esm';
-		return(true);
+		return true;
 	}
 
-	return(false);
+	return false;
 }
 
 export class JS extends Loader {
@@ -350,7 +352,7 @@ export class JS extends Loader {
 		  * compiled if-else statements was not eliminated. */
 		let wasAlive = false;
 
-		const patches: [ number, number, number, number ][] = [];
+		const patches: [number, number, number, number][] = [];
 
 		parseSyntax(reToken, state, (token: string, state: TranslateState) => {
 			// Detect "if" statements not nested inside conditionally compiled blocks
@@ -415,7 +417,7 @@ export class JS extends Loader {
 							// If no errors were thrown, capture the following
 							// curly brace delimited block.
 							state.captureDepth = state.depth + 1;
-						} catch(err) {}
+						} catch(err) { }
 					}
 				} else {
 					mode = ConditionMode.NONE;
