@@ -14,7 +14,7 @@ declare module '../Loader' {
 const emptyPromise = Promise.resolve();
 
 function makeShims(loader: Loader) {
-	return({
+	return ({
 		path: {
 			dirname: (key: string) => {
 				let prefix = '';
@@ -27,13 +27,15 @@ function makeShims(loader: Loader) {
 
 				const slash = key.lastIndexOf('/', key.length - 2);
 
-				return(prefix + key.substr(0, slash + +!slash) || '.');
+				return prefix + key.substr(0, slash + +!slash) || '.';
 			},
 			extname: (key: string) => {
 				const pos = key.lastIndexOf('.');
 				const c = key.charAt(pos - 1);
 
-				return(pos < 1 || c == '/' || (isWin && c == ':') ? '' : key.substr(pos));
+				return (pos < 1 || c == '/' ||
+					(isWin && c == ':') ? '' : key.substr(pos)
+				);
 			},
 			isAbsolute: (key: string) => (
 				key.charAt(0) == '/' ||
@@ -41,7 +43,10 @@ function makeShims(loader: Loader) {
 			),
 			// TODO: Fix this!
 			relative: (base: string, key: string) => {
-				return(URL.relative(URL.resolve(loader.cwd, base), URL.resolve(loader.cwd, key)));
+				return URL.relative(
+					URL.resolve(loader.cwd, base),
+					URL.resolve(loader.cwd, key)
+				);
 			},
 			resolve: (...args: string[]) => {
 				let result = loader.cwd;
@@ -50,15 +55,15 @@ function makeShims(loader: Loader) {
 					result = URL.resolve(result, arg);
 				}
 
-				return(result);
+				return result;
 			},
 			sep: '/'
 		},
 		util: {
 			// TODO
-			inherits: () => {}
+			inherits: () => { }
 		}
-	} as { [name: string]: any });
+	}) as { [name: string]: any };
 }
 
 /** Node.js load plugin for built-in modules. */
@@ -66,7 +71,7 @@ function makeShims(loader: Loader) {
 export class NodeBuiltin extends Loader {
 
 	fetchRecord(record: Record) {
-		return(emptyPromise);
+		return emptyPromise;
 	}
 
 	instantiate(record: Record) {
@@ -79,11 +84,11 @@ export class NodeBuiltin extends Loader {
 			record.moduleInternal.exports[name] = shim[name] || native[name];
 		}
 
-		return(record.moduleInternal.exports);
+		return record.moduleInternal.exports;
 	}
 
 	wrap(record: Record) {
-		return('null');
+		return 'null';
 	}
 
 }

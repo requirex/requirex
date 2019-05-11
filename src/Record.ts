@@ -29,18 +29,18 @@ export class Record {
 		/** Unresolved name used in import. */
 		public importKey?: string,
 		public pkg?: Package
-	) {}
+	) { }
 
 	addDep(key: string) {
 		const num = this.depList.length;
 		this.depList[num] = key;
-		return(num);
+		return num;
 	}
 
 	addBundled(child: Record) {
 		child.parentBundle = this;
 		(this.bundleChildren || (this.bundleChildren = [])).push(child);
-		return(child);
+		return child;
 	}
 
 	resolveDep(key: string, ref: DepRef) {

@@ -27,7 +27,7 @@ const rePackage = new RegExp(
 
 const isInternal: { [key: string]: boolean } = {};
 
-for(let key of ('assert buffer crypto fs http https module net os path stream url util zlib').split(' ')) {
+for(let key of 'assert buffer crypto fs http https module net os path stream url util zlib'.split(' ')) {
 	isInternal[key] = true;
 }
 
@@ -45,7 +45,7 @@ function getRootConfigPaths(baseKey: string) {
 		result.push(baseKey.substr(0, end));
 	} while(end > start);
 
-	return(result);
+	return result;
 }
 
 function getRepoPaths(loader: Loader, basePkgName: string, baseKey: string) {
@@ -64,9 +64,9 @@ function getRepoPaths(loader: Loader, basePkgName: string, baseKey: string) {
 		next = baseKey.lastIndexOf('/', end - 1);
 
 		const chunk = baseKey.substr(next, end - next + 1);
-		if (chunk != nodeModules) {
+		if(chunk != nodeModules) {
 			let root = '';
-			if (basePkgName && chunk.substr(1, basePkgName.length) == basePkgName) {
+			if(basePkgName && chunk.substr(1, basePkgName.length) == basePkgName) {
 				root = baseKey.substr(0, next);
 			} else {
 				root = baseKey.substr(0, end) + nodeModules;
@@ -78,7 +78,7 @@ function getRepoPaths(loader: Loader, basePkgName: string, baseKey: string) {
 
 	resultOther.push({ preferred: true, root: 'https://cdn.jsdelivr.net/npm/' });
 
-	return(resultPreferred.concat(resultOther));
+	return resultPreferred.concat(resultOther);
 }
 
 function parsePackage(rootKey: string, data: string, name?: string) {
@@ -91,10 +91,10 @@ function parsePackage(rootKey: string, data: string, name?: string) {
 
 	// TODO: Handle dependency versions and the browser field.
 
-	if(typeof(browser) == 'string') {
+	if(typeof browser == 'string') {
 		// Use browser entry point.
 		pkg.main = browser;
-	} else if(typeof(browser) == 'object') {
+	} else if(typeof browser == 'object') {
 		// Use browser equivalents of packages and files.
 
 		for(let key in browser) {
@@ -113,12 +113,12 @@ function parsePackage(rootKey: string, data: string, name?: string) {
 		}
 	}
 
-	return(pkg);
+	return pkg;
 }
 
 function ifExists(key: string) {
 	// TODO: Fail for wrong MIME type (mainly html error messages).
-	return(fetch(key, { method: 'HEAD' }).then((res) => res.url));
+	return fetch(key, { method: 'HEAD' }).then((res) => res.url);
 }
 
 function parseFetchedPackage(
@@ -131,21 +131,21 @@ function parseFetchedPackage(
 
 	const parsed = fetched.then((res: FetchResponse) => {
 		redirKey = getDir(res.url);
-		return(res.text());
+		return res.text();
 	}).then((data: string) => {
 		const pkg = parsePackage(redirKey, data, name)
 		loader.packageConfTbl[rootKey] = pkg;
 		loader.packageConfTbl[redirKey] = pkg;
 		loader.packageRootTbl[rootKey] = pkg;
 		loader.packageRootTbl[redirKey] = pkg;
-		return(pkg);
+		return pkg;
 	}).catch(() => {
 		loader.packageConfTbl[rootKey] = false;
-		return(Promise.reject(false));
+		return Promise.reject(false);
 	});
 
 	loader.packageConfTbl[rootKey] = parsed;
-	return(parsed);
+	return parsed;
 }
 
 function fetchPackage(
@@ -168,15 +168,15 @@ function fetchPackage(
 			// A repository was found so look for additional packages there
 			// before other addresses.
 			loader.repoTbl[repoKey] = true;
-			return(fetch(key));
+			return fetch(key);
 		});
 
 		parsed = parseFetchedPackage(loader, repoKey + name, fetched, name);
 	}
 
-	return(Promise.resolve<Package | false>(parsed).catch(
+	return Promise.resolve<Package | false>(parsed).catch(
 		() => ++repoNum! < repoList.length ? fetchPackage(loader, repoList, name, repoNum) : false
-	));
+	);
 }
 
 function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string | undefined) {
@@ -188,19 +188,19 @@ function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string 
 		parsed = parseFetchedPackage(loader, key, loader.fetch(key + '/package.json'));
 	} else if(parsed instanceof Package) {
 		loader.packageRootTbl[key] = parsed;
-		return(Promise.resolve(parsed));
+		return Promise.resolve(parsed);
 	}
 
 	const result = parsed.catch(() => {
 		const nextKey = getNext();
 		// On error always try the next possible (parent) directory.
-		return(nextKey ? loader.packageRootTbl[nextKey] : false);
+		return nextKey ? loader.packageRootTbl[nextKey] : false;
 	}).then(
 		(pkg: false | Package) => loader.packageRootTbl[key] = pkg
 	);
 
 	loader.packageRootTbl[key] = result;
-	return(result);
+	return result;
 }
 
 function fetchContainingPackage(loader: Loader, baseKey: string) {
@@ -252,24 +252,23 @@ function fetchContainingPackage(loader: Loader, baseKey: string) {
 				}
 			}
 
-			return(afterBest);
+			return afterBest;
 		}).catch(
 			() => packageRootTbl[rootConfigPaths[0]]
 		);
 	}
 
-	return(Promise.resolve<Package | false>(pkg || false));
+	return Promise.resolve<Package | false>(pkg || false);
 }
 
 function inRegistry(loader: Loader, key: string) {
-	if(loader.registry[key] || loader.records[key]) return(Promise.resolve(key));
+	if(loader.registry[key] || loader.records[key]) return Promise.resolve(key);
 }
 
 /** Check if a file exists. */
 
 function checkFile(loader: Loader, key: string, importKey: string, ref: DepRef) {
-	const other = (
-		key.match(/\.ts$/) ?
+	const other = (key.match(/\.ts$/) ?
 		// For .ts files also try .tsx.
 		key + 'x' :
 		// For .js files also try /index.js.
@@ -280,16 +279,15 @@ function checkFile(loader: Loader, key: string, importKey: string, ref: DepRef) 
 
 	// TODO: If inRegistry(other) or ifExists(other) then store it in ref,
 	// for adding in package configuration.
-	return(
-		inRegistry(loader, key) || inRegistry(loader, other) ||
-		(
-			!ref.isImport || !reRelative.test(importKey) ? ifExists(key) :
+	return (inRegistry(loader, key) ||
+		inRegistry(loader, other) ||
+		(!ref.isImport || !reRelative.test(importKey) ? ifExists(key) :
 			loader.fetch(key).then((res: FetchResponse) => {
 				result = res.url;
-				return(res.text());
+				return res.text();
 			}).then((text: string) => {
 				ref.sourceCode = text;
-				return(result);
+				return result;
 			})
 		).catch(() => ifExists(other))
 	);
@@ -353,14 +351,14 @@ export class NodeResolve extends Loader {
 		} while(--count);
 
 		if(!count) {
-			throw(new Error('Too many redirections while resolving ' + key));
+			throw new Error('Too many redirections while resolving ' + key);
 		}
 
 		if(ref) {
 			ref.package = pkg;
 		}
 
-		return(resolvedKey);
+		return resolvedKey;
 	}
 
 	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
@@ -390,19 +388,19 @@ export class NodeResolve extends Loader {
 				}
 			}
 
-			return(parsed);
+			return parsed;
 		}).then((pkg: Package | false | undefined) => {
-			if(ref.format == 'node') return(packageName!);
+			if(ref.format == 'node') return packageName!;
 
 			if(pkg) {
 				this.packageNameTbl[packageName!] = pkg;
 				resolvedKey = this.resolveSync(key, baseKey, ref);
 			}
 
-			return(checkFile(this, resolvedKey, key, ref));
+			return checkFile(this, resolvedKey, key, ref);
 		});
 
-		return(result);
+		return result;
 	}
 
 }
