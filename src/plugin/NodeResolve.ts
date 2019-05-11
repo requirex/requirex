@@ -48,7 +48,7 @@ function getRootConfigPaths(baseKey: string) {
 	return(result);
 }
 
-export function getRepoPaths(loader: Loader, baseKey: string) {
+export function getRepoPaths(loader: Loader, basePkgName: string, baseKey: string) {
 	let start = skipSlashes(baseKey, 0, 3);
 
 	const resultPreferred: { preferred?: boolean, root: string }[] = [];
@@ -63,8 +63,14 @@ export function getRepoPaths(loader: Loader, baseKey: string) {
 		end = next;
 		next = baseKey.lastIndexOf('/', end - 1);
 
-		if(baseKey.substr(next, end - next + 1) != nodeModules) {
-			const root = baseKey.substr(0, end) + nodeModules;
+		const chunk = baseKey.substr(next, end - next + 1);
+		if (chunk != nodeModules) {
+			let root = '';
+			if (basePkgName && chunk.substr(1, basePkgName.length) == basePkgName) {
+				root = baseKey.substr(0, next);
+			} else {
+				root = baseKey.substr(0, end) + nodeModules;
+			}
 			const preferred = loader.repoTbl[root];
 			(preferred ? resultPreferred : resultOther).push({ preferred, root });
 		}
@@ -365,6 +371,7 @@ export class NodeResolve extends Loader {
 		// package mappings and versions.
 		const result = fetchContainingPackage(this, baseKey).then((basePkg: Package | false) => {
 			resolvedKey = this.resolveSync(key, baseKey, ref);
+			const parentPackageName = basePkg ? basePkg.name : '';
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
 			packageName = ref.pendingPackageName;
@@ -375,7 +382,7 @@ export class NodeResolve extends Loader {
 				if(parsed === void 0) {
 					parsed = fetchPackage(
 						this,
-						getRepoPaths(this, baseKey),
+						getRepoPaths(this, parentPackageName, baseKey),
 						packageName
 					);
 
