@@ -1,0 +1,38 @@
+/*
+    To use these debugger configs, run:
+        npm i --no-save ts-node
+*/
+
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "Run Example",
+            "type": "node",
+            "request": "launch",
+            "args": [
+                "--nolazy",
+                "-r",
+                "ts-node/register",
+                "${workspaceRoot}/example/node.ts"
+            ],
+            "sourceMaps": true,
+            "cwd": "${workspaceRoot}",
+            "protocol": "inspector",
+        },
+        {
+            "name": "Run Tests",
+            "type": "node",
+            "request": "launch",
+            "args": [
+                "--nolazy",
+                "-r",
+                "ts-node/register",
+                "${workspaceRoot}/test/index.test.ts"
+            ],
+            "sourceMaps": true,
+            "cwd": "${workspaceRoot}",
+            "protocol": "inspector",
+        }
+    ]
+}
