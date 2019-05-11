@@ -10,7 +10,7 @@
 		"noImplicitThis": true,
 		"outDir": "../dist/cjs",
 		"removeComments": false,
-		"sourceMap": false,
+		"sourceMap": true,
 		"strictFunctionTypes": true,
 		"strictNullChecks": true,
 		"target": "es5"

@@ -6,4 +6,5 @@ package-lock.json
 *.lock
 *.log.*
 *.log
+*.map
 *.tgz
