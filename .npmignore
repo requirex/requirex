@@ -1,5 +1,7 @@
 node_modules/
 test/
+dist/test
+example/
 src/
 package-lock.json
 .travis.yml
