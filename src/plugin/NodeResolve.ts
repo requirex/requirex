@@ -25,6 +25,8 @@ const rePackage = new RegExp(
 	'(\/.*)?$'
 );
 
+const reVersion = /^(@[.0-9]+)?\/$/;
+
 const isInternal: { [key: string]: boolean } = {};
 
 for(let key of 'assert buffer crypto fs http https module net os path stream url util zlib'.split(' ')) {
@@ -56,6 +58,12 @@ export function getRepoPaths(loader: Loader, basePkgName: string, baseKey: strin
 	let next = baseKey.lastIndexOf('/');
 	let end: number;
 
+	function addRepo(len: number, suffix: string) {
+		const root = baseKey.substr(0, len) + suffix;
+		const preferred = loader.repoTbl[root];
+		(preferred ? resultPreferred : resultOther).push({ preferred, root });
+	}
+
 	// List parent directories from caller path while it contains
 	// more than 3 slashes (starting from beginning or including last
 	// /node_modules/<name>/).
@@ -64,16 +72,15 @@ export function getRepoPaths(loader: Loader, basePkgName: string, baseKey: strin
 		next = baseKey.lastIndexOf('/', end - 1);
 
 		const chunk = baseKey.substr(next, end - next + 1);
-		if(chunk != nodeModules) {
-			let root = '';
-			if(basePkgName && chunk.substr(1, basePkgName.length) == basePkgName) {
-				root = baseKey.substr(0, next);
-			} else {
-				root = baseKey.substr(0, end) + nodeModules;
-			}
-			const preferred = loader.repoTbl[root];
-			(preferred ? resultPreferred : resultOther).push({ preferred, root });
+		if(
+			basePkgName &&
+			chunk.substr(1, basePkgName.length) == basePkgName &&
+			reVersion.test(chunk.substr(basePkgName.length + 1))
+		) {
+			addRepo(next, '/');
 		}
+
+		if(chunk != nodeModules) addRepo(end, nodeModules);
 	} while(end > start);
 
 	resultOther.push({ preferred: true, root: 'https://cdn.jsdelivr.net/npm/' });
@@ -369,7 +376,7 @@ export class NodeResolve extends Loader {
 		// package mappings and versions.
 		const result = fetchContainingPackage(this, baseKey).then((basePkg: Package | false) => {
 			resolvedKey = this.resolveSync(key, baseKey, ref);
-			const parentPackageName = basePkg ? basePkg.name : '';
+			const parentPackageName = basePkg && basePkg.name;
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
 			packageName = ref.pendingPackageName;
