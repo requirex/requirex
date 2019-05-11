@@ -1,0 +1,18 @@
+{
+	"version": "0.2.0",
+	"configurations": [
+		{
+			"name": "Run Example",
+			"type": "node",
+			"request": "launch",
+			"args": [
+				"--nolazy",
+				"../bin/requirex",
+				"../example/test.ts"
+			],
+			"sourceMaps": true,
+			"cwd": "${workspaceRoot}",
+			"protocol": "inspector"
+		}
+	]
+}
