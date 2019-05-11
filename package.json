@@ -13,7 +13,7 @@
     "tsc": "tsc",
     "start": "./serve.bat",
     "prepublish": "tsc -p src && tsc -p src/tsconfig.esm.json && (checkver lt 5.0.0 || rollup -c) && uglifyjs dist/umd/index.js -c -m > dist/umd/index.min.js",
-    "test": "node bin/requirex ./test/test.ts"
+    "test": "node bin/requirex ./example/test.ts"
   },
   "author": "Juha Järvi",
   "license": "MIT",
