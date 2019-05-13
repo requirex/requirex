@@ -3,7 +3,6 @@
 	"compilerOptions": {
 		"declaration": true,
 		"declarationDir": "../dist/esm",
-		"importHelpers": true,
 		"lib": [ "dom", "es5", "es2015.collection", "es2015.promise" ],
 		"module": "commonjs",
 		"moduleResolution": "node",
