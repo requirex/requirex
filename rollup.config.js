@@ -1,1 +1,1 @@
-module.exports = require('autoroll')({ map: { tslib: 'src/tslib.js' } });
+module.exports = require('autoroll')();
