@@ -193,7 +193,9 @@ export class Loader implements LoaderPlugin {
 	}
 
 	fetch(url: string) {
-		return fetch(url);
+		return fetch(url).then((
+			(res) => res.ok ? res : Promise.reject(res)
+		) as (res: FetchResponse) => FetchResponse);
 	}
 
 	fetchRecord(record: Record) {
