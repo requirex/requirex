@@ -1,4 +1,4 @@
-import { isWin } from './platform';
+import { isWin, origin } from './platform';
 
 /** Match any string and split by the first : ? # chars.
   * Split by : only if a valid protocol name precedes it.
@@ -13,6 +13,28 @@ export function skipSlashes(key: string, start: number, count: number) {
 	while((start = key.indexOf('/', start) + 1) && --count);
 
 	return start;
+}
+
+/** Convert URL to a local path. Strip protocol and possible origin,
+  * use backslahes in file system paths on Windows. */
+
+ export function getLocal(resolvedKey: string) {
+	if(resolvedKey.match(/^file:/)) {
+		return URL.toLocal(resolvedKey);
+	}
+
+	if(origin && resolvedKey.substr(0, origin.length) == origin) {
+		return resolvedKey.substr(origin.length);
+	}
+
+	return resolvedKey;
+}
+
+/** Strip query string, hash, last slash in path and anything after it
+  * to get the directory part of a path or address. **/
+
+export function getDir(key: string) {
+	return key.replace(/(\/[^/#?]*)?([#?].*)?$/, '');
 }
 
 export class URL {

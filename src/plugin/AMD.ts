@@ -1,21 +1,13 @@
 import { Record, ModuleFactory } from '../Record';
 import { ModuleAMD } from '../Module';
 import { globalEnv, globalEval } from '../platform';
-import { Loader, LoaderConfig } from '../LoaderBase';
+import { Loader, LoaderPlugin } from '../Loader';
 
 /** AMD (asynchronous module definition) loader plugin. */
 
-export class AMD extends Loader {
+export const AMD = (loader: Loader): LoaderPlugin => {
 
-	constructor(config?: LoaderConfig) {
-		super();
-		(this.amdDefine as any).amd = true;
-	}
-
-	// TODO: In browsers a fetch method could simply set globals and
-	// inject a script element.
-
-	amdDefine = ((loader: Loader) => function amdDefine(
+	function amdDefine(
 		key?: string | string[] | ModuleFactory,
 		deps?: string[] | ModuleFactory,
 		factory?: ModuleFactory
@@ -81,15 +73,15 @@ export class AMD extends Loader {
 
 		// Disallow redefining a module.
 		/* if(record.moduleInternal) {
-			throw(new Error('Cannot redefine module "' + key + '"'));
+			throw new Error('Cannot redefine module "' + key + '"');
 		} */
 
 		record.factory = factory;
-	})(this);
+	}
 
-	// TODO: Should this be local to a package to support local path mappings?
+	(amdDefine as any).amd = true;
 
-	amdRequire = ((loader: Loader) => function amdRequire(
+	function amdRequire(
 		names: string | string[],
 		resolve?: (...args: any[]) => any,
 		reject?: (err: any) => any,
@@ -141,9 +133,9 @@ export class AMD extends Loader {
 		} else {
 			throw new TypeError('Invalid require');
 		}
-	})(this);
+	}
 
-	discover(record: Record) {
+	function discover(record: Record) {
 		const exports = {};
 
 		record.moduleInternal = {
@@ -155,10 +147,10 @@ export class AMD extends Loader {
 
 		// TODO: Is changing global define necessary?
 		const define = globalEnv.define;
-		globalEnv.define = this.amdDefine;
-		this.latestRecord = record;
+		globalEnv.define = amdDefine;
+		loader.latestRecord = record;
 		record.wrapArgs(record.globalTbl, {
-			'define': this.amdDefine
+			'define': amdDefine
 		});
 
 		try {
@@ -181,14 +173,13 @@ export class AMD extends Loader {
 			record.loadError = err;
 		}
 
-		this.latestRecord = void 0;
+		loader.latestRecord = void 0;
 		// TODO: Is changing global define necessary?
 		globalEnv.define = define;
 	}
 
-	instantiate(record: Record) {
+	function instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleAMD;
-		const self = this;
 
 		// Dynamic require() function.
 		function require(
@@ -197,7 +188,7 @@ export class AMD extends Loader {
 			reject?: (err: any) => any,
 			referer?: string
 		) {
-			return self.amdRequire(names, resolve, reject, referer || record);
+			return amdRequire(names, resolve, reject, referer || record);
 		}
 
 		// Order must match internalDeps in amdDefine.
@@ -213,7 +204,7 @@ export class AMD extends Loader {
 			if(num < 3) return dep;
 
 			const ref = record.depTbl[dep];
-			return ref.module ? ref.module.exports : this.instantiate(ref.record!);
+			return ref.module ? ref.module.exports : loader.instantiate(ref.record!);
 		});
 
 		const exportsNew = record.factory.apply(null, args);
@@ -225,8 +216,10 @@ export class AMD extends Loader {
 		return moduleInternal.exports;
 	}
 
-	wrap(record: Record) {
+	function wrap(record: Record) {
 		return record.sourceCode;
 	}
 
-}
+	return { discover, instantiate, wrap };
+
+};

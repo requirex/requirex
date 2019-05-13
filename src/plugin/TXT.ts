@@ -1,16 +1,16 @@
 import { Record } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
 
-/** JSON loader plugin. */
+/** Text loader plugin. */
 
-export const Json = (loader: Loader): LoaderPlugin => {
+export const TXT = (loader: Loader): LoaderPlugin => {
 
 	function instantiate(record: Record) {
-		return record.compiled || JSON.parse(record.sourceCode);
+		return record.compiled || record.sourceCode;
 	}
 
 	function wrap(record: Record) {
-		return record.sourceCode;
+		return JSON.stringify(record.sourceCode);
 	}
 
 	return { instantiate, wrap };

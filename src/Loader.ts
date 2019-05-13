@@ -1,12 +1,39 @@
-import { URL } from './URL';
+import { URL, getDir } from './URL';
 import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { isNode, origin } from './platform';
 import { fetch, FetchResponse } from './fetch';
-import { LoaderConfig, getDir, SystemDeclaration } from './LoaderBase';
 
 const emptyPromise = Promise.resolve();
+
+export interface LoaderPlugin {
+	fetchRecord?(record: Record): Promise<void>;
+	fetch?(url: string): Promise<FetchResponse>;
+
+	resolveSync?(key: string, baseKey?: string, ref?: DepRef): string;
+	resolve?(key: string, baseKey: string, ref?: DepRef): Promise<string> | string;
+
+	discover?(record: Record): Promise<void> | void;
+
+	translate?(record: Record): Promise<void> | void;
+
+	instantiate?(record: Record): any;
+
+	wrap?(record: Record): string;
+}
+
+export interface LoaderConfig {
+	baseURL?: string;
+	plugins?: { [name: string]: (loader: Loader) => LoaderPlugin };
+	registry?: { [name: string]: any };
+}
+
+export interface SystemDeclaration {
+	setters?: ((val: any) => void)[];
+	execute?: () => any;
+	exports?: any;
+}
 
 export type SystemFactory = (exports?: any, module?: ModuleType) => SystemDeclaration;
 
@@ -80,7 +107,7 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 	return result;
 }
 
-export class Loader {
+export class Loader implements LoaderPlugin {
 
 	constructor(public config?: LoaderConfig) {
 		config = config || {};
@@ -109,8 +136,8 @@ export class Loader {
 
 		for(let name in plugins) {
 			if(plugins.hasOwnProperty(name)) {
-				this.plugins[name] = plugins[name];
-				plugins[name].constructor.call(this);
+				const plugin = plugins[name](this);
+				this.plugins[name.toLowerCase()] = plugin;
 			}
 		}
 	}
@@ -140,8 +167,8 @@ export class Loader {
 		ref.pendingPackageName = void 0;
 		ref.package = void 0;
 
-		let resolvedKey: string = (plugin ?
-			plugin.resolveSync.call(this, key, callerKey, ref) :
+		let resolvedKey = (plugin && plugin.resolveSync ?
+			plugin.resolveSync(key, callerKey, ref) :
 			URL.resolve(callerKey, key)
 		);
 
@@ -156,9 +183,9 @@ export class Loader {
 		const plugin = this.plugins.resolve;
 		callerKey = callerKey || this.baseURL || '';
 
-		return (plugin ?
-			plugin.resolve.call(this, key, callerKey, ref) :
-			Promise.resolve(this.resolveSync(key, callerKey, ref))
+		return Promise.resolve(plugin && plugin.resolve ?
+			plugin.resolve(key, callerKey, ref) :
+			this.resolveSync(key, callerKey, ref)
 		);
 	}
 
@@ -253,9 +280,10 @@ export class Loader {
 			if(ref.sourceCode) {
 				record.sourceCode = ref.sourceCode;
 			} else {
+				const plugin = this.plugins[record.format!] || this;
 				fetched = (
-					this.plugins[record.format!].fetchRecord || this.fetchRecord
-				).call(this, record);
+					plugin.fetchRecord ? plugin : this
+				).fetchRecord!(record);
 			}
 
 			record.discovered = fetched.then(
@@ -291,7 +319,7 @@ export class Loader {
 
 		if(plugin && plugin.discover) {
 			return Promise.resolve(
-				plugin.discover.call(this, record)
+				plugin.discover(record)
 			).then(() => {
 				if(record.format != format) return this.discover(record);
 			});
@@ -304,7 +332,7 @@ export class Loader {
 
 		if(plugin && plugin.translate) {
 			return Promise.resolve(
-				plugin.translate.call(this, record)
+				plugin.translate(record)
 			).then(() => {
 				if(record.format != format) {
 					return Promise.resolve(
@@ -323,7 +351,9 @@ export class Loader {
 	}
 
 	instantiate(record: Record) {
-		if(record.isInstantiated) {
+		const plugin = this.plugins[record.format!];
+
+		if(record.isInstantiated || !plugin || !plugin.instantiate) {
 			return record.moduleInternal.exports;
 		}
 
@@ -335,7 +365,7 @@ export class Loader {
 
 		try {
 			const exportsOld = record.moduleInternal.exports;
-			const exportsNew = this.plugins[record.format!].instantiate.call(this, record);
+			const exportsNew = plugin.instantiate(record);
 			this.registry[record.resolvedKey] = record.moduleInternal;
 
 			if(exportsNew != exportsOld) {
@@ -363,7 +393,7 @@ export class Loader {
 		}
 	}
 
-	wrap(record: Record) { }
+	wrap(record: Record) { return 'null' }
 
 	build(importKey: string, parent?: string) {
 		return fetchTranslate(this, false, importKey, parent).then((record: Record) => {
@@ -405,12 +435,8 @@ export class Loader {
 					'main: ' + str(pkg.main),
 					'map: ' + str(pkg.map),
 					'files: [\n\t\t[\n' + spec.records.map((record: Record) => {
-						const plugin = this.plugins[record.format!];
-						let code = 'null';
-
-						if(plugin && plugin.wrap) {
-							code = plugin.wrap.call(this, record);
-						}
+						const plugin = this.plugins[record.format!] || this;
+						const code = (plugin.wrap ? plugin : this).wrap!(record);
 
 						const deps: string[] = [];
 
@@ -492,6 +518,6 @@ export class Loader {
 	cwd: string;
 	baseURL?: string;
 
-	plugins: { [name: string]: Loader } = {};
+	plugins: { [name: string]: LoaderPlugin } = {};
 
 }

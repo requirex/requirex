@@ -1,13 +1,11 @@
 import { Record } from '../Record';
-import { Loader, LoaderConfig } from '../LoaderBase';
+import { Loader, LoaderPlugin } from '../Loader';
 
 /** CSS loader plugin. */
 
-export class CSS extends Loader {
+export const CSS = (loader: Loader): LoaderPlugin => {
 
-	// constructor(config?: LoaderConfig) {}
-
-	instantiate(record: Record) {
+	function instantiate(record: Record) {
 		if(typeof document != 'object' || !document.createElement) return;
 		const head = document.getElementsByTagName('head')[0];
 
@@ -23,4 +21,6 @@ export class CSS extends Loader {
 		head.appendChild(element);
 	}
 
-}
+	return { instantiate };
+
+};
