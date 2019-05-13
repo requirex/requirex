@@ -1,24 +1,23 @@
+import { getLocal, getDir } from '../URL';
 import { Record } from '../Record';
 import { ModuleCJS } from '../Module';
-import { globalEnv, globalEval, nodeRequire } from '../platform';
-import { Loader, LoaderConfig, getLocal, getDir } from '../LoaderBase';
+import { globalEnv, globalEval } from '../platform';
+import { Loader, LoaderPlugin } from '../Loader';
 
 /** CommonJS loader plugin. */
 
-export class CJS extends Loader {
+export const CJS = (loader: Loader): LoaderPlugin => {
 
-	// constructor(config?: LoaderConfig) {}
-
-	translate(record: Record) {
+	function translate(record: Record) {
 		const cjsRequire: NodeRequire = (
 			(key: string) => {
 				const ref = record.depTbl[key];
 				if(ref) {
-					return ref.module ? ref.module.exports : this.instantiate(ref.record!);
+					return ref.module ? ref.module.exports : loader.instantiate(ref.record!);
 				}
 
-				const resolvedKey = this.resolveSync(key, record.resolvedKey);
-				const moduleObj = this.registry[resolvedKey];
+				const resolvedKey = loader.resolveSync(key, record.resolvedKey);
+				const moduleObj = loader.registry[resolvedKey];
 
 				return moduleObj.exports;
 			}
@@ -26,7 +25,7 @@ export class CJS extends Loader {
 
 		// TODO: maybe support cjsRequire.resolve.paths()
 		cjsRequire.resolve = (
-			(key: string) => this.resolveSync(key, record.resolvedKey)
+			(key: string) => loader.resolveSync(key, record.resolvedKey)
 		) as any;
 
 		// TODO: Object.defineProperty(exports, "__esModule", { value: true });
@@ -53,7 +52,7 @@ export class CJS extends Loader {
 		});
 	}
 
-	instantiate(record: Record) {
+	function instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleCJS;
 		let compiled = record.compiled;
 
@@ -89,8 +88,10 @@ export class CJS extends Loader {
 		return moduleInternal.exports;
 	}
 
-	wrap(record: Record) {
+	function wrap(record: Record) {
 		return record.sourceCode;
 	}
 
-}
+	return { translate, instantiate, wrap };
+
+};

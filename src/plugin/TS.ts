@@ -1,18 +1,11 @@
 import * as _ts from 'typescript';
 
 import { Record } from '../Record';
-import { Loader, LoaderConfig } from '../LoaderBase';
+import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
 	interface Record {
 		tsSnapshot: _ts.IScriptSnapshot
-	}
-}
-
-declare module '../Loader' {
-	interface Loader {
-		tsHost: _ts.LanguageServiceHost;
-		tsService: _ts.LanguageService;
 	}
 }
 
@@ -64,15 +57,16 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 
 /** TypeScript loader plugin. */
 
-export class TS extends Loader {
+export const TS = (loader: Loader): LoaderPlugin => {
 
-	// constructor(config?: LoaderConfig) {}
+	let tsHost: _ts.LanguageServiceHost;
+	let tsService: _ts.LanguageService;
 
-	discover(record: Record) {
-		return this.import('typescript').then((ts: typeof _ts) => {
-			if(!this.tsService) {
-				this.tsHost = createHost(this, ts);
-				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
+	function discover(record: Record) {
+		return loader.import('typescript').then((ts: typeof _ts) => {
+			if(!tsService) {
+				tsHost = createHost(loader, ts);
+				tsService = ts.createLanguageService(tsHost, ts.createDocumentRegistry());
 			}
 
 			let transpiled: string | undefined;
@@ -91,12 +85,12 @@ export class TS extends Loader {
 		});
 	}
 
-	translate(record: Record) {
+	function translate(record: Record) {
 		if(record.format == 'd.ts') return;
 		const tsKey = record.resolvedKey.replace(/\.js$/, '.' + record.format);
 		const jsKey = record.resolvedKey.replace(/\.tsx?$/, '.js');
 
-		for(let info of this.tsService.getEmitOutput(tsKey).outputFiles) {
+		for(let info of tsService.getEmitOutput(tsKey).outputFiles) {
 			if(info.name == jsKey) {
 				record.format = 'js';
 				record.sourceCode = info.text;
@@ -105,6 +99,8 @@ export class TS extends Loader {
 	}
 
 	/** Dummy instantiate for d.ts files. */
-	instantiate(record: Record) { }
+	function instantiate(record: Record) { }
 
-}
+	return { discover, translate, instantiate };
+
+};

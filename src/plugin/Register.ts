@@ -1,15 +1,13 @@
 import { Record } from '../Record';
 import { globalEnv, globalEval } from '../platform';
-import { Loader, LoaderConfig, SystemDeclaration } from '../LoaderBase';
+import { Loader, LoaderPlugin, SystemDeclaration } from '../Loader';
 
-export class Register extends Loader {
-
-	// constructor(config?: LoaderConfig) {}
+export const Register = (loader: Loader): LoaderPlugin => {
 
 	// TODO: In browsers a fetch method could simply set globals and
 	// inject a script element.
 
-	discover(record: Record) {
+	function discover(record: Record) {
 		const exports = {};
 
 		record.moduleInternal = {
@@ -18,10 +16,10 @@ export class Register extends Loader {
 		};
 
 		record.wrapArgs(record.globalTbl, {
-			'System': this
+			'System': loader
 		});
 
-		this.latestRecord = record;
+		loader.latestRecord = record;
 
 		try {
 			const compiled = globalEval(record.sourceCode);
@@ -32,10 +30,10 @@ export class Register extends Loader {
 			record.loadError = err;
 		}
 
-		this.latestRecord = void 0;
+		loader.latestRecord = void 0;
 	}
 
-	instantiate(record: Record) {
+	function instantiate(record: Record) {
 		function addExport(name: string, value: any) {
 			record.moduleInternal.exports[name] = value;
 		}
@@ -46,7 +44,7 @@ export class Register extends Loader {
 
 		for(let num = 0; num < record.depNumList.length; ++num) {
 			const ref = record.depTbl[record.depList[record.depNumList[num] - 3]];
-			const dep = ref.module ? ref.module.exports : this.instantiate(ref.record!);
+			const dep = ref.module ? ref.module.exports : loader.instantiate(ref.record!);
 
 			if(spec.setters && spec.setters[num]) {
 				spec.setters[num].call(null, dep);
@@ -58,4 +56,6 @@ export class Register extends Loader {
 		return record.moduleInternal.exports;
 	}
 
-}
+	return { discover, instantiate };
+
+};

@@ -1,6 +1,5 @@
 import { globalEnv } from './platform';
-import { Loader } from './Loader';
-import { LoaderConfig } from './LoaderBase';
+import { Loader, LoaderConfig } from './Loader';
 
 import { JS } from './plugin/JS';
 import { AMD } from './plugin/AMD';
@@ -8,9 +7,9 @@ import { CJS } from './plugin/CJS';
 import { Register } from './plugin/Register';
 import { TS } from './plugin/TS';
 import { CSS } from './plugin/CSS';
-import { Text } from './plugin/Text';
+import { TXT } from './plugin/TXT';
 import { Json } from './plugin/Json';
-import { NodeBuiltin } from './plugin/NodeBuiltin';
+import { Node } from './plugin/NodeBuiltin';
 import { NodeResolve } from './plugin/NodeResolve';
 
 import { URL } from './URL';
@@ -29,20 +28,20 @@ const globalSystem = globalEnv.System;
 
 export const System = new Loader({
 	plugins: {
-		resolve: NodeResolve.prototype,
+		resolve: NodeResolve,
 
-		js: JS.prototype,
-		amd: AMD.prototype,
-		cjs: CJS.prototype,
-		system: Register.prototype,
-		esm: TS.prototype,
-		ts: TS.prototype,
-		tsx: TS.prototype,
-		'd.ts': TS.prototype,
-		css: CSS.prototype,
-		txt: Text.prototype,
-		json: Json.prototype,
-		node: NodeBuiltin.prototype
+		JS,
+		AMD,
+		CJS,
+		system: Register,
+		esm: TS,
+		TS,
+		tsx: TS,
+		'd.ts': TS,
+		CSS,
+		TXT,
+		Json,
+		Node
 	},
 	registry: {
 		'@empty': {},

@@ -1,5 +1,5 @@
 import { Record, ModuleFormat } from '../Record';
-import { Loader, LoaderConfig } from '../LoaderBase';
+import { Loader, LoaderPlugin } from '../Loader';
 
 const chunkSize = 128;
 
@@ -296,12 +296,12 @@ function guessFormat(token: string, state: TranslateState) {
 	return false;
 }
 
-export class JS extends Loader {
+export const JS = (loader: Loader): LoaderPlugin => {
 
 	/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
 	  * Optimized for speed. */
 
-	discover(record: Record) {
+	function discover(record: Record) {
 		/** Match string or comment start tokens, curly braces and some keywords. */
 		let reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV');
 
@@ -511,4 +511,6 @@ export class JS extends Loader {
 		record.sourceCode = text;
 	}
 
-}
+	return { discover };
+
+};

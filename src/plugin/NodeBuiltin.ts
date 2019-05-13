@@ -3,18 +3,15 @@ import { isWin } from '../platform';
 import { URL } from '../URL';
 import { Record } from '../Record';
 import { nodeRequire } from '../platform';
-import { Loader, LoaderConfig } from '../LoaderBase';
-
-declare module '../Loader' {
-	interface Loader {
-		nodeShims: { [name: string]: any };
-	}
-}
+import { Loader, LoaderPlugin } from '../Loader';
 
 const emptyPromise = Promise.resolve();
 
-function makeShims(loader: Loader) {
-	return ({
+/** Node.js load plugin for built-in modules. */
+
+export const Node = (loader: Loader): LoaderPlugin => {
+
+	const nodeShims = {
 		path: {
 			dirname: (key: string) => {
 				let prefix = '';
@@ -41,7 +38,6 @@ function makeShims(loader: Loader) {
 				key.charAt(0) == '/' ||
 				(isWin && key.match(/^[A-Za-z]+:\//))
 			),
-			// TODO: Fix this!
 			relative: (base: string, key: string) => {
 				return URL.relative(
 					URL.resolve(loader.cwd, base),
@@ -63,22 +59,15 @@ function makeShims(loader: Loader) {
 			// TODO
 			inherits: () => { }
 		}
-	}) as { [name: string]: any };
-}
+	} as { [name: string]: any };
 
-/** Node.js load plugin for built-in modules. */
-
-export class NodeBuiltin extends Loader {
-
-	fetchRecord(record: Record) {
+	function fetchRecord(record: Record) {
 		return emptyPromise;
 	}
 
-	instantiate(record: Record) {
-		if(!this.nodeShims) this.nodeShims = makeShims(this);
-
+	function instantiate(record: Record) {
 		const native = nodeRequire(record.resolvedKey);
-		const shim = this.nodeShims[record.resolvedKey] || {};
+		const shim = nodeShims[record.resolvedKey] || {};
 
 		for(let name in native) {
 			record.moduleInternal.exports[name] = shim[name] || native[name];
@@ -87,8 +76,6 @@ export class NodeBuiltin extends Loader {
 		return record.moduleInternal.exports;
 	}
 
-	wrap(record: Record) {
-		return 'null';
-	}
+	return { fetchRecord, instantiate };
 
-}
+};

@@ -1,8 +1,8 @@
-import { URL, skipSlashes } from '../URL';
+import { URL, skipSlashes, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { fetch, FetchResponse } from '../fetch';
-import { Loader, LoaderConfig, getDir } from '../LoaderBase';
+import { Loader, LoaderPlugin } from '../Loader';
 
 const emptyPromise = Promise.resolve();
 const nodeModules = '/node_modules/';
@@ -302,12 +302,10 @@ function checkFile(loader: Loader, key: string, importKey: string, ref: DepRef) 
 
 /** Node.js module lookup plugin. */
 
-export class NodeResolve extends Loader {
+export const NodeResolve = (loader: Loader): LoaderPlugin => {
 
-	// constructor(config?: LoaderConfig) {}
-
-	resolveSync(key: string, baseKey?: string, ref?: DepRef) {
-		let pkg = this.getPackage(baseKey!) || this.package;
+	function resolveSync(key: string, baseKey?: string, ref?: DepRef) {
+		let pkg = loader.getPackage(baseKey!) || loader.package;
 		let resolvedKey = key;
 		let mappedKey: string;
 		let count = 8;
@@ -328,7 +326,7 @@ export class NodeResolve extends Loader {
 				} else break;
 			}
 
-			if(inRegistry(this, key)) {
+			if(inRegistry(loader, key)) {
 				resolvedKey = key;
 				break;
 			}
@@ -337,14 +335,14 @@ export class NodeResolve extends Loader {
 			if(!match) break;
 
 			const name = match[1];
-			const otherPkg = this.packageNameTbl[name];
+			const otherPkg = loader.packageNameTbl[name];
 
 			if(!(otherPkg instanceof Package)) {
 				// Configuration for referenced package is not currently available.
 				if(ref) {
 					ref.pendingPackageName = name;
 					if(isInternal[name]) {
-						pkg = this.package;
+						pkg = loader.package;
 						ref.format = 'node';
 					}
 				}
@@ -368,30 +366,30 @@ export class NodeResolve extends Loader {
 		return resolvedKey;
 	}
 
-	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
+	function resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
 		let resolvedKey: string;
 		let packageName: string | undefined;
 
 		// Find a package containing baseKey, to get browser path and
 		// package mappings and versions.
-		const result = fetchContainingPackage(this, baseKey).then((basePkg: Package | false) => {
-			resolvedKey = this.resolveSync(key, baseKey, ref);
+		const result = fetchContainingPackage(loader, baseKey).then((basePkg: Package | false) => {
+			resolvedKey = loader.resolveSync(key, baseKey, ref);
 			const parentPackageName = basePkg && basePkg.name;
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
 			packageName = ref.pendingPackageName;
 
 			if(packageName && ref.format != 'node') {
-				parsed = this.packageNameTbl[packageName];
+				parsed = loader.packageNameTbl[packageName];
 
 				if(parsed === void 0) {
 					parsed = fetchPackage(
-						this,
-						getRepoPaths(this, parentPackageName, baseKey),
+						loader,
+						getRepoPaths(loader, parentPackageName, baseKey),
 						packageName
 					);
 
-					this.packageNameTbl[packageName!] = parsed as Promise<Package | false>;
+					loader.packageNameTbl[packageName!] = parsed as Promise<Package | false>;
 				}
 			}
 
@@ -400,14 +398,16 @@ export class NodeResolve extends Loader {
 			if(ref.format == 'node') return packageName!;
 
 			if(pkg) {
-				this.packageNameTbl[packageName!] = pkg;
-				resolvedKey = this.resolveSync(key, baseKey, ref);
+				loader.packageNameTbl[packageName!] = pkg;
+				resolvedKey = loader.resolveSync(key, baseKey, ref);
 			}
 
-			return checkFile(this, resolvedKey, key, ref);
+			return checkFile(loader, resolvedKey, key, ref);
 		});
 
 		return result;
 	}
 
-}
+	return { resolveSync, resolve };
+
+};
