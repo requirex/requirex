@@ -302,9 +302,12 @@ function checkFile(loader: Loader, key: string, importKey: string, ref: DepRef) 
 
 /** Node.js module lookup plugin. */
 
-export const NodeResolve = (loader: Loader): LoaderPlugin => {
+export class NodeResolve implements LoaderPlugin {
 
-	function resolveSync(key: string, baseKey?: string, ref?: DepRef) {
+	constructor(private loader: Loader) { }
+
+	resolveSync(key: string, baseKey?: string, ref?: DepRef) {
+		const loader = this.loader;
 		let pkg = loader.getPackage(baseKey!) || loader.package;
 		let resolvedKey = key;
 		let mappedKey: string;
@@ -366,7 +369,8 @@ export const NodeResolve = (loader: Loader): LoaderPlugin => {
 		return resolvedKey;
 	}
 
-	function resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
+	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
+		const loader = this.loader;
 		let resolvedKey: string;
 		let packageName: string | undefined;
 
@@ -408,6 +412,4 @@ export const NodeResolve = (loader: Loader): LoaderPlugin => {
 		return result;
 	}
 
-	return { resolveSync, resolve };
-
-};
+}

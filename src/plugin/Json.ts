@@ -3,16 +3,14 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 /** JSON loader plugin. */
 
-export const Json = (loader: Loader): LoaderPlugin => {
+export class Json implements LoaderPlugin {
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		return record.compiled || JSON.parse(record.sourceCode);
 	}
 
-	function wrap(record: Record) {
+	wrap(record: Record) {
 		return record.sourceCode;
 	}
 
-	return { instantiate, wrap };
-
-};
+}

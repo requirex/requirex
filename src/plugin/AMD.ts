@@ -5,9 +5,13 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 /** AMD (asynchronous module definition) loader plugin. */
 
-export const AMD = (loader: Loader): LoaderPlugin => {
+export class AMD implements LoaderPlugin {
 
-	function amdDefine(
+	constructor(private loader: Loader) {
+		(this.amdDefine as any).amd = true;
+	}
+
+	amdDefine = ((loader: Loader) => function amdDefine(
 		key?: string | string[] | ModuleFactory,
 		deps?: string[] | ModuleFactory,
 		factory?: ModuleFactory
@@ -77,11 +81,9 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 		} */
 
 		record.factory = factory;
-	}
+	})(this.loader);
 
-	(amdDefine as any).amd = true;
-
-	function amdRequire(
+	amdRequire = ((loader: Loader) => function amdRequire(
 		names: string | string[],
 		resolve?: (...args: any[]) => any,
 		reject?: (err: any) => any,
@@ -133,9 +135,9 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 		} else {
 			throw new TypeError('Invalid require');
 		}
-	}
+	})(this.loader);
 
-	function discover(record: Record) {
+	discover(record: Record) {
 		const exports = {};
 
 		record.moduleInternal = {
@@ -147,10 +149,10 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 
 		// TODO: Is changing global define necessary?
 		const define = globalEnv.define;
-		globalEnv.define = amdDefine;
-		loader.latestRecord = record;
+		globalEnv.define = this.amdDefine;
+		this.loader.latestRecord = record;
 		record.wrapArgs(record.globalTbl, {
-			'define': amdDefine
+			'define': this.amdDefine
 		});
 
 		try {
@@ -173,23 +175,21 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 			record.loadError = err;
 		}
 
-		loader.latestRecord = void 0;
+		this.loader.latestRecord = void 0;
 		// TODO: Is changing global define necessary?
 		globalEnv.define = define;
 	}
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleAMD;
 
 		// Dynamic require() function.
-		function require(
+		const require = (
 			names: string | string[],
 			resolve?: (...args: any[]) => any,
 			reject?: (err: any) => any,
 			referer?: string
-		) {
-			return amdRequire(names, resolve, reject, referer || record);
-		}
+		) => this.amdRequire(names, resolve, reject, referer || record);
 
 		// Order must match internalDeps in amdDefine.
 		const deps: any[] = [
@@ -204,7 +204,7 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 			if(num < 3) return dep;
 
 			const ref = record.depTbl[dep];
-			return ref.module ? ref.module.exports : loader.instantiate(ref.record!);
+			return ref.module ? ref.module.exports : this.loader.instantiate(ref.record!);
 		});
 
 		const exportsNew = record.factory.apply(null, args);
@@ -216,10 +216,8 @@ export const AMD = (loader: Loader): LoaderPlugin => {
 		return moduleInternal.exports;
 	}
 
-	function wrap(record: Record) {
+	wrap(record: Record) {
 		return record.sourceCode;
 	}
 
-	return { discover, instantiate, wrap };
-
-};
+}

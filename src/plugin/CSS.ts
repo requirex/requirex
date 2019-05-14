@@ -3,9 +3,9 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 /** CSS loader plugin. */
 
-export const CSS = (loader: Loader): LoaderPlugin => {
+export class CSS implements LoaderPlugin {
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		if(typeof document != 'object' || !document.createElement) return;
 		const head = document.getElementsByTagName('head')[0];
 
@@ -21,6 +21,4 @@ export const CSS = (loader: Loader): LoaderPlugin => {
 		head.appendChild(element);
 	}
 
-	return { instantiate };
-
-};
+}

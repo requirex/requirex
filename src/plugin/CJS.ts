@@ -6,9 +6,13 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 /** CommonJS loader plugin. */
 
-export const CJS = (loader: Loader): LoaderPlugin => {
+export class CJS implements LoaderPlugin {
 
-	function translate(record: Record) {
+	constructor(private loader: Loader) { }
+
+	translate(record: Record) {
+		const loader = this.loader;
+
 		const cjsRequire: NodeRequire = (
 			(key: string) => {
 				const ref = record.depTbl[key];
@@ -52,7 +56,7 @@ export const CJS = (loader: Loader): LoaderPlugin => {
 		});
 	}
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleCJS;
 		let compiled = record.compiled;
 
@@ -88,10 +92,8 @@ export const CJS = (loader: Loader): LoaderPlugin => {
 		return moduleInternal.exports;
 	}
 
-	function wrap(record: Record) {
+	wrap(record: Record) {
 		return record.sourceCode;
 	}
 
-	return { translate, instantiate, wrap };
-
-};
+}
