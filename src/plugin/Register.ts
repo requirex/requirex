@@ -2,12 +2,12 @@ import { Record } from '../Record';
 import { globalEnv, globalEval } from '../platform';
 import { Loader, LoaderPlugin, SystemDeclaration } from '../Loader';
 
-export const Register = (loader: Loader): LoaderPlugin => {
+export class Register implements LoaderPlugin {
 
-	// TODO: In browsers a fetch method could simply set globals and
-	// inject a script element.
+	constructor(private loader: Loader) { }
 
-	function discover(record: Record) {
+	discover(record: Record) {
+		const loader = this.loader;
 		const exports = {};
 
 		record.moduleInternal = {
@@ -33,7 +33,7 @@ export const Register = (loader: Loader): LoaderPlugin => {
 		loader.latestRecord = void 0;
 	}
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		function addExport(name: string, value: any) {
 			record.moduleInternal.exports[name] = value;
 		}
@@ -44,7 +44,7 @@ export const Register = (loader: Loader): LoaderPlugin => {
 
 		for(let num = 0; num < record.depNumList.length; ++num) {
 			const ref = record.depTbl[record.depList[record.depNumList[num] - 3]];
-			const dep = ref.module ? ref.module.exports : loader.instantiate(ref.record!);
+			const dep = ref.module ? ref.module.exports : this.loader.instantiate(ref.record!);
 
 			if(spec.setters && spec.setters[num]) {
 				spec.setters[num].call(null, dep);
@@ -56,6 +56,4 @@ export const Register = (loader: Loader): LoaderPlugin => {
 		return record.moduleInternal.exports;
 	}
 
-	return { discover, instantiate };
-
-};
+}

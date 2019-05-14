@@ -9,9 +9,11 @@ const emptyPromise = Promise.resolve();
 
 /** Node.js load plugin for built-in modules. */
 
-export const Node = (loader: Loader): LoaderPlugin => {
+export class Node implements LoaderPlugin {
 
-	const nodeShims = {
+	constructor(private loader: Loader) { }
+
+	nodeShims = ((loader: Loader) => ({
 		path: {
 			dirname: (key: string) => {
 				let prefix = '';
@@ -59,15 +61,15 @@ export const Node = (loader: Loader): LoaderPlugin => {
 			// TODO
 			inherits: () => { }
 		}
-	} as { [name: string]: any };
+	} as { [name: string]: any }))(this.loader);
 
-	function fetchRecord(record: Record) {
+	fetchRecord(record: Record) {
 		return emptyPromise;
 	}
 
-	function instantiate(record: Record) {
+	instantiate(record: Record) {
 		const native = nodeRequire(record.resolvedKey);
-		const shim = nodeShims[record.resolvedKey] || {};
+		const shim = this.nodeShims[record.resolvedKey] || {};
 
 		for(let name in native) {
 			record.moduleInternal.exports[name] = shim[name] || native[name];
@@ -76,6 +78,4 @@ export const Node = (loader: Loader): LoaderPlugin => {
 		return record.moduleInternal.exports;
 	}
 
-	return { fetchRecord, instantiate };
-
-};
+}

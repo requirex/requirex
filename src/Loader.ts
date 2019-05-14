@@ -25,7 +25,7 @@ export interface LoaderPlugin {
 
 export interface LoaderConfig {
 	baseURL?: string;
-	plugins?: { [name: string]: (loader: Loader) => LoaderPlugin };
+	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
 	registry?: { [name: string]: any };
 }
 
@@ -136,7 +136,7 @@ export class Loader implements LoaderPlugin {
 
 		for(let name in plugins) {
 			if(plugins.hasOwnProperty(name)) {
-				const plugin = plugins[name](this);
+				const plugin = new plugins[name](this);
 				this.plugins[name.toLowerCase()] = plugin;
 			}
 		}

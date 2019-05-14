@@ -296,12 +296,12 @@ function guessFormat(token: string, state: TranslateState) {
 	return false;
 }
 
-export const JS = (loader: Loader): LoaderPlugin => {
+export class JS implements LoaderPlugin {
 
 	/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
 	  * Optimized for speed. */
 
-	function discover(record: Record) {
+	discover(record: Record) {
 		/** Match string or comment start tokens, curly braces and some keywords. */
 		let reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV');
 
@@ -511,6 +511,4 @@ export const JS = (loader: Loader): LoaderPlugin => {
 		record.sourceCode = text;
 	}
 
-	return { discover };
-
-};
+}

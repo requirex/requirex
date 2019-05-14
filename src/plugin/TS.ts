@@ -57,16 +57,15 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 
 /** TypeScript loader plugin. */
 
-export const TS = (loader: Loader): LoaderPlugin => {
+export class TS implements LoaderPlugin {
 
-	let tsHost: _ts.LanguageServiceHost;
-	let tsService: _ts.LanguageService;
+	constructor(private loader: Loader) { }
 
-	function discover(record: Record) {
-		return loader.import('typescript').then((ts: typeof _ts) => {
-			if(!tsService) {
-				tsHost = createHost(loader, ts);
-				tsService = ts.createLanguageService(tsHost, ts.createDocumentRegistry());
+	discover(record: Record) {
+		return this.loader.import('typescript').then((ts: typeof _ts) => {
+			if(!this.tsService) {
+				this.tsHost = createHost(this.loader, ts);
+				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
 			}
 
 			let transpiled: string | undefined;
@@ -85,12 +84,12 @@ export const TS = (loader: Loader): LoaderPlugin => {
 		});
 	}
 
-	function translate(record: Record) {
+	translate(record: Record) {
 		if(record.format == 'd.ts') return;
 		const tsKey = record.resolvedKey.replace(/\.js$/, '.' + record.format);
 		const jsKey = record.resolvedKey.replace(/\.tsx?$/, '.js');
 
-		for(let info of tsService.getEmitOutput(tsKey).outputFiles) {
+		for(let info of this.tsService.getEmitOutput(tsKey).outputFiles) {
 			if(info.name == jsKey) {
 				record.format = 'js';
 				record.sourceCode = info.text;
@@ -99,8 +98,9 @@ export const TS = (loader: Loader): LoaderPlugin => {
 	}
 
 	/** Dummy instantiate for d.ts files. */
-	function instantiate(record: Record) { }
+	instantiate(record: Record) { }
 
-	return { discover, translate, instantiate };
+	tsHost: _ts.LanguageServiceHost;
+	tsService: _ts.LanguageService;
 
-};
+}
