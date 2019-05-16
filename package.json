@@ -13,10 +13,11 @@
     "tsc": "tsc",
     "rollup": "rollup",
     "start": "./example/browser/serve.bat",
+    "example": "node bin/requirex ./example/node/test.ts",
     "watch": "cd src && tsc --watch",
     "build:umd": "cd src && tsc -m es6 --outdir ../dist/esm && rollup -c && uglifyjs ../dist/umd/index.js -c -m > ../dist/umd/index.min.js",
     "prepublish": "tsc -p src && (checkver lt 5.0.0 || npm run build:umd)",
-    "test": "node bin/requirex ./example/node/test.ts"
+    "test": "cd test && npm test"
   },
   "author": "Juha Järvi",
   "license": "MIT",
