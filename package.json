@@ -11,11 +11,12 @@
   },
   "scripts": {
     "tsc": "tsc",
-    "start": "./serve.bat",
+    "rollup": "rollup",
+    "start": "./example/browser/serve.bat",
     "watch": "cd src && tsc --watch",
-    "build:umd": "tsc -p src -m es6 --outdir dist/esm && rollup -c && uglifyjs dist/umd/index.js -c -m > dist/umd/index.min.js",
+    "build:umd": "cd src && tsc -m es6 --outdir ../dist/esm && rollup -c && uglifyjs ../dist/umd/index.js -c -m > ../dist/umd/index.min.js",
     "prepublish": "tsc -p src && (checkver lt 5.0.0 || npm run build:umd)",
-    "test": "node bin/requirex ./example/test.ts"
+    "test": "node bin/requirex ./example/node/test.ts"
   },
   "author": "Juha Järvi",
   "license": "MIT",
