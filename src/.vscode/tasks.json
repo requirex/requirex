@@ -3,7 +3,7 @@
 	"tasks": [
 		{
 			"type": "shell",
-			"command": "npm run -- tsc --watch -p src",
+			"command": "npm run watch",
 			"label": "tsc --watch",
 			"isBackground": true,
 			"problemMatcher": [

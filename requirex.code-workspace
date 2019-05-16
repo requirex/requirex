@@ -1,0 +1,15 @@
+{
+	"folders": [
+		{ "path": "src" },
+		{ "path": "example" }
+	],
+	"settings": {
+		"editor.insertSpaces": false,
+		"javascript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+		"typescript.format.insertSpaceAfterFunctionKeywordForAnonymousFunctions": false,
+		"javascript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+		"typescript.format.insertSpaceAfterKeywordsInControlFlowStatements": false,
+		"typescript.tsdk": "../node_modules/typescript/lib",
+		"typescript.tsc.autoDetect": "off"
+	}
+}

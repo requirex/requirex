@@ -12,6 +12,7 @@
 			],
 			"sourceMaps": true,
 			"cwd": "${workspaceRoot}",
+			"preLaunchTask": "tsc --watch",
 			"protocol": "inspector"
 		}
 	]
