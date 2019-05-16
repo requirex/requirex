@@ -8,7 +8,7 @@
 			"args": [
 				"--nolazy",
 				"../bin/requirex",
-				"../example/test.ts"
+				"../example/node/test.ts"
 			],
 			"sourceMaps": true,
 			"cwd": "${workspaceRoot}",
