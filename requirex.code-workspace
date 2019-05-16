@@ -1,6 +1,7 @@
 {
 	"folders": [
 		{ "path": "src" },
+		{ "path": "test" },
 		{ "path": "example" }
 	],
 	"settings": {

@@ -1,0 +1,14 @@
+{
+  "private": true,
+  "scripts": {
+    "installed": "node installed.js || npm install",
+    "test": "(node installed.js || npm install) && ts-node -P ../src/tsconfig.json index.ts"
+  },
+  "devDependencies": {
+    "@types/blue-tape": "^0.1.32",
+    "blue-tape": "^1.0.0",
+    "tap-spec": "^5.0.0",
+    "ts-node": "^8.1.0",
+    "typescript": "file:../node_modules/typescript"
+  }
+}

@@ -50,7 +50,7 @@ function getRootConfigPaths(baseKey: string) {
 	return result;
 }
 
-function getRepoPaths(loader: Loader, basePkgName: string | false, baseKey: string) {
+export function getRepoPaths(loader: Loader, basePkgName: string | false, baseKey: string) {
 	let start = skipSlashes(baseKey, 0, 3);
 
 	const resultPreferred: { preferred?: boolean, root: string }[] = [];
