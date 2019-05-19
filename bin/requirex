@@ -2,4 +2,9 @@
 
 const url = require('..').URL;
 
-System.import(url.resolve(process.cwd() + '/', process.argv[2]));
+System.import(
+	url.resolve(process.cwd() + '/', process.argv[2])
+).catch(function(err) {
+	console.error(err);
+	process.exit(1);
+});

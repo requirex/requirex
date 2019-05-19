@@ -1,5 +1,5 @@
 try {
-	require('tap-spec') && require('ts-node');
+	require.resolve('tap-spec') && require.resolve('ts-node');
 } catch(err) {
 	process.exit(1);
 }
