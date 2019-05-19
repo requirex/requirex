@@ -45,3 +45,11 @@ export function globalEval(code: string): () => any {
 		return (0, eval)(code);
 	}
 }
+
+export let isES6: boolean;
+
+try {
+	isES6 = (0, eval)('(...a)=>({a}={a})')().a.length == 0;
+} catch(err) {
+	isES6 = false;
+}

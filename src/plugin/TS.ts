@@ -29,7 +29,7 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 				const record = loader.records[key];
 				const format = record.format;
 
-				if(format == 'esm' || format == 'ts' || format == 'd.ts' || record.tsSnapshot) {
+				if(format == 'ts' || format == 'd.ts' || record.tsSnapshot) {
 					keys.push(key.replace(/\.js$/, '.ts'));
 				}
 

@@ -1,5 +1,6 @@
 import { Record, ModuleFormat } from '../Record';
-import { Loader, LoaderPlugin } from '../Loader';
+import { LoaderPlugin } from '../Loader';
+import { isES6 } from '../platform';
 
 const chunkSize = 128;
 
@@ -303,7 +304,7 @@ function guessFormat(token: string, state: TranslateState) {
 	if((token == 'import' || token == 'export') && !state.depth) {
 		// ES modules contain import and export statements
 		// at the root level scope.
-		state.record.format = 'esm';
+		state.record.format = 'ts';
 		return true;
 	}
 
@@ -317,7 +318,7 @@ export class JS implements LoaderPlugin {
 
 	discover(record: Record) {
 		/** Match string or comment start tokens, curly braces and some keywords. */
-		let reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV');
+		let reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV|let|const|=>');
 
 		/** Finished trying to detect the module format? */
 		let formatKnown = false;
@@ -482,6 +483,11 @@ export class JS implements LoaderPlugin {
 
 			// Disregard eliminated code in module format and dependency detection.
 			if(mode == ConditionMode.DEAD_BLOCK) return;
+
+			if(!isES6 && (token == 'let' || token == 'const' || token == '=>')) {
+				state.record.format = 'ts';
+				formatKnown = true;
+			}
 
 			if(!formatKnown) {
 				formatKnown = guessFormat(token, state);

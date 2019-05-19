@@ -2,7 +2,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Loader } from './Loader';
 
-export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'esm' | 'ts' | 'tsx' | 'd.ts' | 'node';
+export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node';
 
 export type ModuleFactory = (...args: any[]) => any;
 
