@@ -45,6 +45,8 @@ export const System = new Loader({
 	},
 	registry: {
 		'@empty': {},
+		// Prevent TypeScript compiler from importing an optional module.
+		'source-map-support': {},
 		requirex
 	}
 });
