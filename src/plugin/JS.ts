@@ -4,11 +4,16 @@ import { Loader, LoaderPlugin } from '../Loader';
 const chunkSize = 128;
 
 /** Table of characters that may surround keyword and identifier names. */
-const sep: { [char: string]: boolean } = {};
+const sepBefore: { [char: string]: boolean } = {};
+const sepAfter: { [char: string]: boolean } = {};
 
-for(let c of '\t\n\r !"#%&\'()*+,-./:;<=>?@[\\]^`{|}~'.split('')) {
-	sep[c] = true;
+for(let c of '\t\n\r !"#%&\'()*+,-/;<=>?@[\\]^`{|}~'.split('')) {
+	sepBefore[c] = true;
+	sepAfter[c] = true;
 }
+
+sepBefore[':'] = true;
+sepAfter['.'] = true;
 
 /** Create a regexp for matching string or comment start tokens,
   * curly braces (to track nested blocks) and given keywords.
@@ -52,7 +57,11 @@ const reCallAssign = /(\*\/|[^\t\n\r !"#%&'(*+,-./:;<=>?@[\\^`{|~])\s*\(|[^=]=[^
 /** Match any number of comments and whitespace. */
 const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
 
-const reBlock = new RegExp(reComments + '\\{');
+const reBlock = new RegExp('^' + reComments + '\\{');
+
+const reLabel = new RegExp(':' + reComments + '$');
+
+const reDot = new RegExp('^' + reComments + '\\.');
 
 /** Match an else statement after an if block. */
 const reElse = new RegExp(reComments + 'else' + reComments + '(if|\\{)');
@@ -127,6 +136,8 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 	let token: string;
 	let last: number;
 	let pos: number;
+	let before: string;
+	let after: string;
 
 	// Loop through all interesting tokens in the input string.
 	while((match = reToken.exec(text))) {
@@ -212,11 +223,14 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 				// Handle matched keywords. Examine what follows them.
 				pos = last + token.length;
 
+				before = text.charAt(last - 1);
+				after = text.charAt(pos);
+
 				// Ensure token is not part of a longer token (surrounding
 				// characters should be invalid in keyword and identifier names).
 				if(
-					(sep[text.charAt(last - 1)] || !last) &&
-					(sep[text.charAt(pos)] || pos >= text.length)
+					(sepBefore[before] || !last) &&
+					(sepAfter[after] || pos >= text.length)
 				) {
 					state.depth = depth;
 					state.last = last;
