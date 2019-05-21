@@ -17,7 +17,7 @@
     "watch": "cd src && tsc --watch",
     "build:umd": "cd src && tsc -m es6 --outdir ../dist/esm && rollup -c && uglifyjs ../dist/umd/index.js -c -m > ../dist/umd/index.min.js",
     "prepublish": "tsc -p src && (checkver lt 5.0.0 || npm run build:umd)",
-    "test": "(checkver lt 5.0.0 && npm run example) || (cd test && npm test)"
+    "test": "cd test && npm test"
   },
   "author": "Juha Järvi",
   "license": "MIT",

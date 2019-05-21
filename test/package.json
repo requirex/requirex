@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "installed": "node installed.js || npm install",
-    "test": "(node installed.js || npm install) && ts-node -P ../src/tsconfig.json index.ts"
+    "test": "(node installed.js || npm install) && ( (checkver lt 5.0.0 && node ../bin/requirex index.ts) || ts-node -P ../src/tsconfig.json index.ts)"
   },
   "devDependencies": {
     "@types/blue-tape": "^0.1.32",

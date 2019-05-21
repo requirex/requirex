@@ -72,14 +72,9 @@ export class Node implements LoaderPlugin {
 	}
 
 	instantiate(record: Record) {
-		const native = nodeRequire(record.resolvedKey);
-		const shim = this.nodeShims[record.resolvedKey] || {};
-
-		for(let name in native) {
-			record.moduleInternal.exports[name] = shim[name] || native[name];
-		}
-
-		return record.moduleInternal.exports;
+		return record.moduleInternal.exports = (
+			features.isNode ? nodeRequire(record.resolvedKey) : this.nodeShims[record.resolvedKey] || {}
+		);
 	}
 
 }
