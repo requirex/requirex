@@ -1,8 +1,6 @@
-import { isWin } from '../platform';
-
 import { URL } from '../URL';
 import { Record } from '../Record';
-import { nodeRequire } from '../platform';
+import { features, nodeRequire } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
 const emptyPromise = Promise.resolve();
@@ -18,7 +16,7 @@ export class Node implements LoaderPlugin {
 			dirname: (key: string) => {
 				let prefix = '';
 
-				if(isWin) {
+				if(features.isWin) {
 					const parts = key.match(/^([A-Za-z]+:)?(.*)/)!;
 					prefix = parts[1] || '';
 					key = parts[2];
@@ -33,12 +31,12 @@ export class Node implements LoaderPlugin {
 				const c = key.charAt(pos - 1);
 
 				return (pos < 1 || c == '/' ||
-					(isWin && c == ':') ? '' : key.substr(pos)
+					(features.isWin && c == ':') ? '' : key.substr(pos)
 				);
 			},
 			isAbsolute: (key: string) => (
 				key.charAt(0) == '/' ||
-				(isWin && key.match(/^[A-Za-z]+:\//))
+				(features.isWin && key.match(/^[A-Za-z]+:\//))
 			),
 			relative: (base: string, key: string) => {
 				return URL.relative(
@@ -59,7 +57,7 @@ export class Node implements LoaderPlugin {
 		},
 		util: {
 			// TODO
-			inherits: () => { }
+			// inherits: () => { }
 		}
 	} as { [name: string]: any }))(this.loader);
 

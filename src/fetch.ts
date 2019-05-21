@@ -2,7 +2,7 @@ import * as FS from 'fs';
 import * as HTTP from 'http';
 
 import { URL } from './URL';
-import { isNode, nodeRequire } from './platform';
+import { features, nodeRequire } from './platform';
 
 /** Subset of a WhatWG fetch response relevant for script loaders. */
 
@@ -132,7 +132,7 @@ const empty: { [name: string]: string } = {};
 export function fetch(uri: string, options?: { method?: string }) {
 	console.log('FETCH', options && options.method, uri);
 
-	return isNode ? (
+	return features.isNode ? (
 		nodeRequest(uri, options).then(({ text, uri, headers }) => new FetchResponse(
 			uri,
 			text,

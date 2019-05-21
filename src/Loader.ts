@@ -2,7 +2,7 @@ import { URL, getDir } from './URL';
 import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { isNode, origin } from './platform';
+import { features, origin } from './platform';
 import { fetch, FetchResponse } from './fetch';
 
 const emptyPromise = Promise.resolve();
@@ -75,7 +75,7 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		// TODO: avoid unnecessary repeated resolution and / or translation.
 	}
 
-	if(!parent && isNode) {
+	if(!parent && features.isNode) {
 		// If no parent module is known,
 		// in Node.js we can still use the calling file's path.
 
@@ -115,7 +115,7 @@ export class Loader implements LoaderPlugin {
 		this.cwd = (
 			(origin && getDir(window.location.pathname)) ||
 			// TODO: Convert backslashes?
-			(isNode && process.cwd()) ||
+			(features.isNode && process.cwd()) ||
 			'/'
 		);
 

@@ -4,16 +4,28 @@ declare const process: any;
 
 export const globalEnv: { [name: string]: any } = typeof self == 'object' ? self : global;
 
-export const isNode = (
+const isNode = (
 	typeof process == 'object' &&
 	Object.prototype.toString.call(process) == '[object process]'
 );
 
-export const isWin = (
-	isNode &&
-	typeof process.platform == 'string' &&
-	process.platform.substr(0, 3) == 'win'
-);
+let isES6: boolean;
+
+try {
+	isES6 = (0, eval)('(...a)=>({a}={a})')().a.length == 0;
+} catch(err) {
+	isES6 = false;
+}
+
+export const features = {
+	isES6,
+	isNode,
+	isWin: (
+		isNode &&
+		typeof process.platform == 'string' &&
+		process.platform.substr(0, 3) == 'win'
+	)
+};
 
 /** Portable replacement for location.origin. */
 export const origin = (typeof window == 'object' &&
@@ -44,12 +56,4 @@ export function globalEval(code: string): () => any {
 		// Indirect eval runs in global scope.
 		return (0, eval)(code);
 	}
-}
-
-export let isES6: boolean;
-
-try {
-	isES6 = (0, eval)('(...a)=>({a}={a})')().a.length == 0;
-} catch(err) {
-	isES6 = false;
 }
