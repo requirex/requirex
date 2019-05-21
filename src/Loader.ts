@@ -4,6 +4,7 @@ import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin } from './platform';
 import { fetch, FetchResponse } from './fetch';
+import { isInternal } from './plugin/NodeBuiltin';
 
 const emptyPromise = Promise.resolve();
 
@@ -46,7 +47,7 @@ export interface BuiltSpec {
 }
 
 function handleExtension(loader: Loader, key: string, ref?: DepRef) {
-	let format: string | undefined;
+	let format = ref && ref.format;
 	let pos = key.lastIndexOf('/') + 1;
 	let ext: string | undefined;
 
@@ -54,12 +55,6 @@ function handleExtension(loader: Loader, key: string, ref?: DepRef) {
 	// the most specific, like .d.ts followed by .ts.
 	while((pos = key.indexOf('.', pos) + 1) && !format) {
 		ext = key.substr(pos).toLowerCase();
-		format = loader.plugins[ext] && ext;
-	}
-
-	if(!ext && !loader.registry[key] && !loader.records[key]) {
-		ext = (ref && ref.defaultExt) || 'js';
-		key += '.' + ext;
 		format = loader.plugins[ext] && ext;
 	}
 
@@ -167,14 +162,16 @@ export class Loader implements LoaderPlugin {
 		ref.pendingPackageName = void 0;
 		ref.package = void 0;
 
+		if(isInternal[key]) {
+			ref.format = 'node';
+			ref.package = this.package;
+			return key;
+		}
+
 		let resolvedKey = (plugin && plugin.resolveSync ?
 			plugin.resolveSync(key, callerKey, ref) :
 			URL.resolve(callerKey, key)
 		);
-
-		if(!ref.format) {
-			resolvedKey = handleExtension(this, resolvedKey, ref);
-		}
 
 		return resolvedKey;
 	}
@@ -186,7 +183,7 @@ export class Loader implements LoaderPlugin {
 		return Promise.resolve(plugin && plugin.resolve ?
 			plugin.resolve(key, callerKey, ref) :
 			this.resolveSync(key, callerKey, ref)
-		);
+		).then((resolvedKey: string) => handleExtension(this, resolvedKey, ref));
 	}
 
 	fetch(url: string) {
