@@ -2,7 +2,7 @@ import { URL, getDir } from './URL';
 import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin } from './platform';
+import { features, origin, globalEnv } from './platform';
 import { fetch, FetchResponse } from './fetch';
 import { isInternal } from './plugin/NodeBuiltin';
 
@@ -306,13 +306,12 @@ export class Loader implements LoaderPlugin {
 	discover(record: Record): Promise<void> | void {
 		const format = record.format;
 		const plugin = this.plugins[format!];
-
-		record.globalTbl = {
-			'process': {
-				'cwd': () => this.cwd,
-				'env': { 'NODE_ENV': 'production' }
-			}
+		const process = features.isNode ? globalEnv.process : {
+			'cwd': () => this.cwd,
+			'env': { 'NODE_ENV': 'production' }
 		};
+
+		record.globalTbl = { process };
 
 		if(plugin && plugin.discover) {
 			return Promise.resolve(
