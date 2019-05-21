@@ -27,12 +27,6 @@ const rePackage = new RegExp(
 
 const reVersion = /^(@[.0-9]+)?\/$/;
 
-const isInternal: { [key: string]: boolean } = {};
-
-for(let key of 'assert buffer crypto fs http https module net os path stream url util zlib'.split(' ')) {
-	isInternal[key] = true;
-}
-
 function getRootConfigPaths(baseKey: string) {
 	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules), 3);
 
@@ -128,6 +122,13 @@ function ifExists(key: string) {
 	return fetch(key, { method: 'HEAD' }).then((res) => res.url);
 }
 
+function ifExistsList(list: string[], pos: number): Promise<string> {
+	const key = list[pos];
+	if(!key) return Promise.reject(new Error('Error fetching ' + list[0]));
+
+	return ifExists(list[pos]).catch(() => ifExistsList(list, pos + 1));
+}
+
 function parseFetchedPackage(
 	loader: Loader,
 	rootKey: string,
@@ -157,13 +158,13 @@ function parseFetchedPackage(
 
 function fetchPackage(
 	loader: Loader,
-	repoList: { preferred?: boolean, root: string }[],
+	repoList: { preferred?: boolean, root?: string }[],
 	name: string,
 	repoNum?: number
 ): Promise<Package | false> {
 	repoNum = repoNum || 0;
 	const repo = repoList[repoNum];
-	const repoKey = repo.root;
+	const repoKey = repo.root || '';
 
 	let parsed = loader.packageConfTbl[repoKey + name];
 
@@ -174,7 +175,7 @@ function fetchPackage(
 		const fetched = repo.preferred ? fetch(jsonKey) : ifExists(jsonKey).then((key: string) => {
 			// A repository was found so look for additional packages there
 			// before other addresses.
-			loader.repoTbl[repoKey] = true;
+			if(repoKey) loader.repoTbl[repoKey] = true;
 			return fetch(key);
 		});
 
@@ -269,35 +270,62 @@ function fetchContainingPackage(loader: Loader, baseKey: string) {
 }
 
 function inRegistry(loader: Loader, key: string) {
-	if(loader.registry[key] || loader.records[key]) return Promise.resolve(key);
+	return loader.registry[key] || loader.records[key];
 }
 
 /** Check if a file exists. */
 
-function checkFile(loader: Loader, key: string, importKey: string, ref: DepRef) {
-	const other = (key.match(/\.ts$/) ?
-		// For .ts files also try .tsx.
-		key + 'x' :
-		// For .js files also try /index.js.
-		key.replace(/\/?(\.js)?$/, '/index.js')
-	);
+function checkFile(loader: Loader, key: string, importKey: string, baseKey: string, ref: DepRef) {
+	let baseExt: string | undefined;
+	let name: string;
 
-	let result: string;
+	let pos = key.lastIndexOf('.') + 1;
+	let ext = key.substr(pos);
 
-	// TODO: If inRegistry(other) or ifExists(other) then store it in ref,
-	// for adding in package configuration.
-	return (inRegistry(loader, key) ||
-		inRegistry(loader, other) ||
-		(!ref.isImport || !reRelative.test(importKey) ? ifExists(key) :
-			loader.fetch(key).then((res: FetchResponse) => {
-				result = res.url;
-				return res.text();
-			}).then((text: string) => {
+	if(!(pos && loader.plugins[ext]) && !inRegistry(loader, key)) {
+		pos = key.length + 1;
+		ext = (ref && ref.defaultExt) || 'js';
+		key += '.' + ext;
+	}
+
+	const list: string[] = [ key ];
+
+	if(ext == 'js') {
+		baseExt = baseKey.substr(baseKey.lastIndexOf('.') + 1);
+
+		if(baseExt == 'ts') {
+			name = key.substr(0, pos) + 'ts';
+			list.push(name);
+			list.push(name + 'x');
+		}
+	}
+
+	if(ext == 'ts') {
+		list.push(key + 'x');
+	}
+
+	if(ext == 'js') {
+		name = key.replace(/\/?(\.js)?$/, '/index');
+		list.push(name + '.js');
+		if(baseExt == 'ts') list.push(name + '.ts');
+	}
+
+	// TODO: If result is not the first key, configure mappings.
+
+	for(let key of list) {
+		if(inRegistry(loader, key)) return key;
+	}
+
+	if(ref.isImport && reRelative.test(importKey)) {
+		return loader.fetch(key).then((res: FetchResponse) =>
+			res.text().then((text: string) => {
 				ref.sourceCode = text;
-				return result;
+				return res.url;
 			})
-		).catch(() => ifExists(other))
-	);
+		).catch(() => ifExistsList(list, 1));
+	}
+
+	return ifExistsList(list, 0);
 }
 
 /** Node.js module lookup plugin. */
@@ -342,14 +370,7 @@ export class NodeResolve implements LoaderPlugin {
 
 			if(!(otherPkg instanceof Package)) {
 				// Configuration for referenced package is not currently available.
-				if(ref) {
-					ref.pendingPackageName = name;
-					if(isInternal[name]) {
-						pkg = loader.package;
-						ref.format = 'node';
-					}
-				}
-
+				if(ref) ref.pendingPackageName = name;
 				break;
 			}
 
@@ -383,7 +404,7 @@ export class NodeResolve implements LoaderPlugin {
 
 			packageName = ref.pendingPackageName;
 
-			if(packageName && ref.format != 'node') {
+			if(packageName) {
 				parsed = loader.packageNameTbl[packageName];
 
 				if(parsed === void 0) {
@@ -399,14 +420,29 @@ export class NodeResolve implements LoaderPlugin {
 
 			return parsed;
 		}).then((pkg: Package | false | undefined) => {
-			if(ref.format == 'node') return packageName!;
+			if(ref.format == 'node') {
+				return resolvedKey!;
+			}
 
 			if(pkg) {
 				loader.packageNameTbl[packageName!] = pkg;
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
 			}
 
-			return checkFile(loader, resolvedKey, key, ref);
+			return checkFile(loader, resolvedKey, key, baseKey, ref);
+		}).catch((err: any) => {
+			if(packageName) return Promise.reject(err);
+
+			return fetchPackage(
+				loader,
+				[{}],
+				resolvedKey
+			).then((pkg: Package | false | undefined) => {
+				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
+
+				resolvedKey = loader.resolveSync(key, baseKey, ref);
+				return checkFile(loader, resolvedKey, key, baseKey, ref);
+			});
 		});
 
 		return result;
