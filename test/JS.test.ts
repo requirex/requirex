@@ -1,11 +1,11 @@
 import * as test from 'blue-tape';
 import { System } from '../src';
 import { Record } from '../src/Record';
+import { features } from '../src/platform';
 import { JS } from '../src/plugin/JS';
-import { mock } from './platform';
 
 test('Module format autodetection', async (t: test.Test) => {
-	mock({ isES6: false });
+	features.isES6 = false;
 
 	const record = new Record(System, '');
 	const js = new JS();

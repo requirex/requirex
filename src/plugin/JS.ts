@@ -1,6 +1,6 @@
 import { Record, ModuleFormat } from '../Record';
 import { LoaderPlugin } from '../Loader';
-import { isES6 } from '../platform';
+import { features } from '../platform';
 
 const chunkSize = 128;
 
@@ -484,7 +484,7 @@ export class JS implements LoaderPlugin {
 			// Disregard eliminated code in module format and dependency detection.
 			if(mode == ConditionMode.DEAD_BLOCK) return;
 
-			if(!isES6 && (token == 'let' || token == 'const' || token == '=>')) {
+			if(!features.isES6 && (token == 'let' || token == 'const' || token == '=>')) {
 				state.record.format = 'ts';
 				formatKnown = true;
 			}

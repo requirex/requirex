@@ -1,4 +1,4 @@
-import { isWin, origin } from './platform';
+import { features, origin } from './platform';
 
 /** Match any string and split by the first : ? # chars.
   * Split by : only if a valid protocol name precedes it.
@@ -152,7 +152,7 @@ export class URL {
 	static fromLocal(local: string) {
 		let key = local;
 
-		if(isWin) {
+		if(features.isWin) {
 			// TODO: Convert \\server\ to file://server/
 			key = key.replace(/\\/g, '/').replace(/^([0-9A-Za-z]+:\/)/, '/$1');
 		}
@@ -163,7 +163,7 @@ export class URL {
 	static toLocal(key: string) {
 		let local = key.replace(/^file:\/\//, '');
 
-		if(isWin) {
+		if(features.isWin) {
 			// TODO: Convert file://server/ to \\server\
 			local = local.replace(/^\/([0-9A-Za-z]+:\/)/, '$1').replace(/\//g, '\\');
 		}
