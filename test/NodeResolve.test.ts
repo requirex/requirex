@@ -1,6 +1,6 @@
 import * as test from 'blue-tape';
-import { System } from '../src';
-import { getRepoPaths } from '../src/plugin/NodeResolve';
+import { System } from '../dist/cjs';
+import { getRepoPaths } from '../dist/cjs/plugin/NodeResolve';
 
 // Super Simple Sanity tests
 test(async (t: any) => {
