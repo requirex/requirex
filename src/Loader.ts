@@ -235,7 +235,9 @@ export class Loader implements LoaderPlugin {
 			record.resolveDep(importKey, ref);
 			return result;
 		}).catch((err: NodeJS.ErrnoException) => {
-			err.message += '\n    importing ' + importKey + ' from ' + record.resolvedKey;
+			if(err && err.message) {
+				err.message += '\n    importing ' + importKey + ' from ' + record.resolvedKey;
+			}
 			throw err;
 		});
 
@@ -286,7 +288,9 @@ export class Loader implements LoaderPlugin {
 			record.discovered = fetched.then(
 				() => this.discover(record)
 			).catch((err: NodeJS.ErrnoException) => {
-				err.message += '\n    translating ' + record.resolvedKey;
+				if(err && err.message) {
+					err.message += '\n    translating ' + record.resolvedKey;
+				}
 				throw err;
 			});
 		}
@@ -372,7 +376,9 @@ export class Loader implements LoaderPlugin {
 
 			return exportsNew;
 		} catch(err) {
-			err.message += '\n    instantiating ' + record.resolvedKey;
+			if(err && err.message) {
+				err.message += '\n    instantiating ' + record.resolvedKey;
+			}
 			throw err;
 		}
 	}
