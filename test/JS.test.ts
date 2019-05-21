@@ -1,8 +1,8 @@
 import * as test from 'blue-tape';
-import { System } from '../src';
-import { Record } from '../src/Record';
-import { features } from '../src/platform';
-import { JS } from '../src/plugin/JS';
+import { System } from '../dist/cjs';
+import { Record } from '../dist/cjs/Record';
+import { features } from '../dist/cjs/platform';
+import { JS } from '../dist/cjs/plugin/JS';
 
 test('Module format autodetection', async (t: test.Test) => {
 	features.isES6 = false;

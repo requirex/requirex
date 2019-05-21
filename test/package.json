@@ -2,7 +2,7 @@
   "private": true,
   "scripts": {
     "installed": "node installed.js || npm install",
-    "test:run": "(checkver lt 5.0.0 && node ../bin/requirex index.ts) || ts-node -P ../src/tsconfig.json index.ts",
+    "test:run": "(checkver lt 5.0.0 && node ../bin/requirex index.ts) || ts-node -TP ../src/tsconfig.json index.ts",
     "test": "(node installed.js || npm install) && npm run test:run"
   },
   "devDependencies": {
