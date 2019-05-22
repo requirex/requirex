@@ -49,4 +49,4 @@ If installed globally using `npm`, `requirex` can effectively replace `npx`.
 
 [The MIT License](https://raw.githubusercontent.com/requirex/requirex/master/LICENSE)
 
-Copyright (c) 2018- BusFaster Ltd
+Copyright (c) 2018- RequireX authors, see doc/AUTHORS
