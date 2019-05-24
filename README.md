@@ -1,9 +1,17 @@
-# RequireX
+<div align="center">
+<img width="576" height="432" src="https://unpkg.com/requirex@0.1.1/doc/rex.svg">
 
 [![npm version](https://img.shields.io/npm/v/requirex.svg)](https://www.npmjs.com/package/requirex)
+
+[![Travis status](https://travis-ci.org/requirex/requirex.svg?branch=master)](http://travis-ci.org/requirex/requirex)
+[![AppVeyor status](https://ci.appveyor.com/api/projects/status/rwywobi1pvq95pwu/branch/master?svg=true)](https://ci.appveyor.com/project/jjrv/requirex/branch/master)
+
 [![dependency status](https://david-dm.org/requirex/requirex.svg)](https://david-dm.org/requirex/requirex)
 [![install size](https://img.shields.io/bundlephobia/min/requirex.svg)](https://bundlephobia.com/result?p=requirex)
 [![license](https://img.shields.io/npm/l/requirex.svg)](https://raw.githubusercontent.com/requirex/requirex/master/LICENSE)
+
+<h1>requirex</h1>
+</div>
 
 `requirex` is a zero-configuration module loader for browsers and Node.js.
 It allows modern JavaScript and TypeScript development without requiring other tooling, even Node.js.
