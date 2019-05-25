@@ -1,8 +1,13 @@
 node_modules/
+example/
 test/
 src/
+doc/*.svg
+index.html
 package-lock.json
+appveyor.yml
 .travis.yml
+*.code-workspace
 *.lock
 *.log.*
 *.log
