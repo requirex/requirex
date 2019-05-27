@@ -3,6 +3,7 @@ import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { fetch, FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
+import { features } from '../platform';
 
 const emptyPromise = Promise.resolve();
 const nodeModules = '/node_modules/';
@@ -26,6 +27,12 @@ const rePackage = new RegExp(
 );
 
 const reVersion = /^(@[.0-9]+)?\/$/;
+
+const isInternal: { [key: string]: boolean } = {};
+
+for(let key of 'assert buffer crypto events fs http https module net os path stream url util vm zlib'.split(' ')) {
+	isInternal[key] = true;
+}
 
 function getRootConfigPaths(baseKey: string) {
 	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules), 3);
@@ -88,7 +95,7 @@ function parsePackage(rootKey: string, data: string, name?: string) {
 
 	pkg.version = json.version;
 	pkg.main = json.main || 'index.js';
-	const browser = json.browser;
+	const browser = !features.isNode && json.browser;
 
 	// TODO: Handle dependency versions and the browser field.
 
@@ -370,7 +377,16 @@ export class NodeResolve implements LoaderPlugin {
 
 			if(!(otherPkg instanceof Package)) {
 				// Configuration for referenced package is not currently available.
-				if(ref) ref.pendingPackageName = name;
+				if(ref) {
+					if(isInternal[name]) {
+						resolvedKey = name;
+						pkg = loader.package;
+						ref.format = 'node';
+					} else {
+						ref.pendingPackageName = name;
+					}
+				}
+
 				break;
 			}
 
@@ -390,10 +406,12 @@ export class NodeResolve implements LoaderPlugin {
 		return resolvedKey;
 	}
 
-	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
+	resolve(key: string, baseKey: string, ref?: DepRef): Promise<string> {
 		const loader = this.loader;
 		let resolvedKey: string;
 		let packageName: string | undefined;
+
+		ref = ref || {};
 
 		// Find a package containing baseKey, to get browser path and
 		// package mappings and versions.
@@ -402,7 +420,7 @@ export class NodeResolve implements LoaderPlugin {
 			const parentPackageName = basePkg && basePkg.name;
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
-			packageName = ref.pendingPackageName;
+			packageName = ref!.pendingPackageName;
 
 			if(packageName) {
 				parsed = loader.packageNameTbl[packageName];
@@ -420,8 +438,11 @@ export class NodeResolve implements LoaderPlugin {
 
 			return parsed;
 		}).then((pkg: Package | false | undefined) => {
-			if(ref.format == 'node') {
-				return resolvedKey!;
+			const plugin = ref!.format && loader.plugins[ref!.format];
+
+			if(plugin) {
+				if(plugin.resolve) return plugin.resolve(key, baseKey, ref);
+				if(plugin.resolveSync) return plugin.resolveSync(key, baseKey, ref);
 			}
 
 			if(pkg) {
@@ -429,7 +450,9 @@ export class NodeResolve implements LoaderPlugin {
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
 			}
 
-			return checkFile(loader, resolvedKey, key, baseKey, ref);
+			if(ref!.sourceCode) return resolvedKey;
+
+			return checkFile(loader, resolvedKey, key, baseKey, ref!);
 		}).catch((err: any) => {
 			if(packageName) return Promise.reject(err);
 
@@ -441,7 +464,7 @@ export class NodeResolve implements LoaderPlugin {
 				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
 
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
-				return checkFile(loader, resolvedKey, key, baseKey, ref);
+				return checkFile(loader, resolvedKey, key, baseKey, ref!);
 			});
 		});
 
