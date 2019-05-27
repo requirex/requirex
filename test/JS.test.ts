@@ -34,4 +34,11 @@ test('Module format autodetection', async (t: test.Test) => {
 			t.equal(record.format, format);
 		}
 	}
+
+	record.format = void 0;
+	record.sourceCode = 'if(process.env.NODE_ENV != "production") { throw new Error(); }';
+	record.globalTbl = { process: { env: { NODE_ENV: 'production' } } };
+
+	js.discover(record);
+	t.equal(record.sourceCode, 'if(0) {}');
 });
