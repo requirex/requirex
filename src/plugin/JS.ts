@@ -8,13 +8,12 @@ const chunkSize = 128;
 const sepBefore: { [char: string]: boolean } = {};
 const sepAfter: { [char: string]: boolean } = {};
 
-for(let c of '\t\n\r !"#%&\'()*+,-/;<=>?@[\\]^`{|}~'.split('')) {
+for(let c of '\t\n\r !"#%&\'()*+,-./;<=>?@[\\]^`{|}~'.split('')) {
 	sepBefore[c] = true;
 	sepAfter[c] = true;
 }
 
 sepBefore[':'] = true;
-sepAfter['.'] = true;
 
 /** Create a regexp for matching string or comment start tokens,
   * curly braces (to track nested blocks) and given keywords.
@@ -53,7 +52,7 @@ const reBeforeRegExp = /(^|[!%&(*+,-/:;<=>?\[^{|}~])\s*(return\s*)?$/;
 const reHashBang = /^\ufeff?#![^\r\n]*/;
 
 /** Match any potential function call or assignment, including suspicious comments before parens. */
-const reCallAssign = /(\*\/|[^\t\n\r !"#%&'(*+,-./:;<=>?@[\\^`{|~])\s*\(|[^=]=[^=]|\+\+|--/;
+const reCallAssign = /(\*\/|[^\t\n\r !"#%&'(*+,-./:;<=>?@[\\^`{|~])\s*\(|[^!=]=[^=]|\+\+|--/;
 
 /** Match any number of comments and whitespace. */
 const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
@@ -128,7 +127,11 @@ function skipRegExp(text: string, pos: number) {
 	return -1;
 }
 
-function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
+function parseSyntax(
+	reToken: RegExp,
+	state: TranslateState,
+	handler: (token: string, state: TranslateState, before?: string, after?: string) => void
+) {
 	const err = 'Parse error';
 	const text = state.text;
 	let depth = state.depth;
@@ -236,7 +239,7 @@ function parseSyntax(reToken: RegExp, state: TranslateState, handler: any) {
 					state.depth = depth;
 					state.last = last;
 					state.pos = pos;
-					handler(token, state);
+					handler(token, state, before, after);
 				}
 
 				continue;
@@ -369,9 +372,15 @@ export class JS implements LoaderPlugin {
 
 		const patches: [number, number, number, number][] = [];
 
-		parseSyntax(reToken, state, (token: string, state: TranslateState) => {
+		parseSyntax(reToken, state, (token: string, state: TranslateState, before?: string, after?: string) => {
+			if(token == 'NODE_ENV' && mode == ConditionMode.CONDITION) {
+				mode = ConditionMode.STATIC_CONDITION;
+			}
+
 			// Detect "if" statements not nested inside conditionally compiled blocks
 			// (which is still unsupported, would need a state stack here).
+
+			if(before == '.') return;
 
 			if(token == 'if' && state.captureDepth! < 0) {
 				conditionStart = state.last!;
@@ -383,10 +392,6 @@ export class JS implements LoaderPlugin {
 				mode = ConditionMode.CONDITION;
 				// Capture the "if" statement conditions.
 				state.captureDepth = state.depth + 1;
-			}
-
-			if(token == 'NODE_ENV' && mode == ConditionMode.CONDITION) {
-				mode = ConditionMode.STATIC_CONDITION;
 			}
 
 			// Handle end of captured "if" statement conditions (closing paren
@@ -484,7 +489,10 @@ export class JS implements LoaderPlugin {
 			// Disregard eliminated code in module format and dependency detection.
 			if(mode == ConditionMode.DEAD_BLOCK) return;
 
-			if(!features.isES6 && (token == 'let' || token == 'const' || token == '=>')) {
+			if(
+				!features.isES6 &&
+				(token == 'let' || token == 'const' || token == '=>')
+			) {
 				state.record.format = 'ts';
 				formatKnown = true;
 			}
