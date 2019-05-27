@@ -4,7 +4,6 @@ import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin, globalEnv } from './platform';
 import { fetch, FetchResponse } from './fetch';
-import { isInternal } from './plugin/NodeBuiltin';
 
 const emptyPromise = Promise.resolve();
 
@@ -86,10 +85,11 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 	}
 
 	const ref: DepRef = { isImport: true, package: loader.package };
-	const result = loader.resolve(importKey, parent, ref).then((resolvedKey: string) =>
+
+	const result = loader.resolve(importKey, parent && URL.resolve(parent, '.'), ref).then((resolvedKey: string) =>
 		(instantiate && loader.registry[resolvedKey] && loader.registry[resolvedKey].exports) ||
 		// Detect and resolve all recursive dependencies.
-		loader.discoverRecursive(resolvedKey, importKey, ref, instantiate).then(
+		loader.discoverRecursive(resolvedKey, importKey, ref!, instantiate).then(
 			// Instantiate after translating all detected dependencies.
 			(record: Record) => Promise.all(
 				record.deepDepList.map((record: Record) => loader.translate(record))
@@ -154,19 +154,21 @@ export class Loader implements LoaderPlugin {
 		}
 	}
 
-	resolveSync(key: string, callerKey?: string, ref: DepRef = {}) {
-		const plugin = this.plugins.resolve;
-		callerKey = callerKey || this.baseURL || '';
+	resolveSync(key: string, callerKey?: string, ref?: DepRef) {
+		let plugin: LoaderPlugin | undefined;
 
-		ref.format = void 0;
-		ref.pendingPackageName = void 0;
-		ref.package = void 0;
+		ref = ref || {};
+		const match = key.match(/(^|[/.])([^/.]+)!(.*)$/);
 
-		if(isInternal[key]) {
-			ref.format = 'node';
-			ref.package = this.package;
-			return key;
+		if(match) {
+			ref.format = match[3] || match[2];
+			key = key.substr(0, key.indexOf('!'));
 		}
+
+		if(ref.format) plugin = this.plugins[ref.format];
+		if(!plugin || !plugin.resolveSync) plugin = this.plugins.resolve;
+
+		callerKey = callerKey || this.baseURL || '';
 
 		let resolvedKey = (plugin && plugin.resolveSync ?
 			plugin.resolveSync(key, callerKey, ref) :
@@ -177,7 +179,11 @@ export class Loader implements LoaderPlugin {
 	}
 
 	resolve(key: string, callerKey?: string, ref?: DepRef): Promise<string> {
-		const plugin = this.plugins.resolve;
+		let plugin: LoaderPlugin | undefined;
+
+		if(ref && ref.format) plugin = this.plugins[ref.format];
+		if(!plugin || !plugin.resolve) plugin = this.plugins.resolve;
+
 		callerKey = callerKey || this.baseURL || '';
 
 		return Promise.resolve(plugin && plugin.resolve ?
@@ -208,7 +214,7 @@ export class Loader implements LoaderPlugin {
 	  * original import() call. */
 
 	discoverImport(importKey: string, record: Record, instantiate: boolean, base: Record) {
-		const ref: DepRef = { isImport: true };
+		const ref = record.depTbl[importKey] || { isImport: true };
 		const discovered = this.resolve(
 			importKey,
 			record.resolvedKey,
@@ -292,19 +298,16 @@ export class Loader implements LoaderPlugin {
 					err.message += '\n    translating ' + record.resolvedKey;
 				}
 				throw err;
-			});
+			}).then(() => Promise.all(record.depList.map(
+				// Resolve and translate each imported dependency.
+				(key: string) => this.discoverImport(key, record, instantiate, base!)
+			))).then(() => base!);
 		}
 
 		// Store import record in table and wait for it to be translated.
 		ref.record = record;
 
-		return record.discovered.then(
-			// Loop through all imported dependencies.
-			() => Promise.all(record.depList.map(
-				// Resolve and translate each dependency.
-				(key: string) => this.discoverImport(key, record, instantiate, base!)
-			)).then(() => base!)
-		);
+		return record.discovered;
 	}
 
 	discover(record: Record): Promise<void> | void {
@@ -328,6 +331,11 @@ export class Loader implements LoaderPlugin {
 
 	translate(record: Record): Promise<void> | void {
 		const format = record.format;
+
+		// Avoid translating code twice using the same format.
+		if(record.translated == format) return;
+		record.translated = format;
+
 		const plugin = this.plugins[format!];
 
 		if(plugin && plugin.translate) {
@@ -479,7 +487,7 @@ export class Loader implements LoaderPlugin {
 
 				record.format = format;
 				record.compiled = compiled;
-				record.discovered = emptyPromise;
+				record.discovered = Promise.resolve(record);
 
 				this.records[resolvedKey] = record;
 				recordList[num] = record;
@@ -494,8 +502,7 @@ export class Loader implements LoaderPlugin {
 
 			for(let key in deps) {
 				if(deps.hasOwnProperty(key)) {
-					record.addDep(key);
-					record.resolveDep(key, { record: recordList[deps[key]] });
+					record.addDep(key, { record: recordList[deps[key]] });
 				}
 			}
 

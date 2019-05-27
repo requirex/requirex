@@ -2,7 +2,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Loader } from './Loader';
 
-export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node';
+export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node' | 'document';
 
 export type ModuleFactory = (...args: any[]) => any;
 
@@ -31,9 +31,12 @@ export class Record {
 		public pkg?: Package
 	) { }
 
-	addDep(key: string) {
+	addDep(key: string, ref?: DepRef) {
 		const num = this.depList.length;
 		this.depList[num] = key;
+
+		if(ref) this.resolveDep(key, ref);
+
 		return num;
 	}
 
@@ -114,6 +117,8 @@ export class Record {
 	num?: number;
 
 	/** Promise resolved after discovery or rejected with a load error. */
-	discovered?: Promise<void>;
+	discovered?: Promise<Record>;
+	/** Latest format used in translation, to avoid repeating it. */
+	translated?: ModuleFormat;
 
 }

@@ -5,12 +5,6 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 const emptyPromise = Promise.resolve();
 
-export const isInternal: { [key: string]: boolean } = {};
-
-for(let key of 'assert buffer crypto events fs http https module net os path stream url util vm zlib'.split(' ')) {
-	isInternal[key] = true;
-}
-
 /** Node.js load plugin for built-in modules. */
 
 export class Node implements LoaderPlugin {
@@ -66,6 +60,10 @@ export class Node implements LoaderPlugin {
 			// inherits: () => { }
 		}
 	} as { [name: string]: any }))(this.loader);
+
+	resolve(key: string) {
+		return key;
+	}
 
 	fetchRecord(record: Record) {
 		return emptyPromise;

@@ -27,6 +27,9 @@ export const features = {
 	)
 };
 
+const _getTags = typeof document == 'object' && document.getElementsByTagName;
+export const getTags = _getTags && ((name: string) => _getTags.call(document, name));
+
 /** Portable replacement for location.origin. */
 export const origin = (typeof window == 'object' &&
 	typeof location == 'object' &&

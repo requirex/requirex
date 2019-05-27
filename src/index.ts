@@ -1,4 +1,4 @@
-import { globalEnv } from './platform';
+import { globalEnv, getTags } from './platform';
 import { Loader, LoaderConfig } from './Loader';
 
 import { JS } from './plugin/JS';
@@ -11,6 +11,7 @@ import { TXT } from './plugin/TXT';
 import { Json } from './plugin/Json';
 import { Node } from './plugin/NodeBuiltin';
 import { NodeResolve } from './plugin/NodeResolve';
+import { Document } from './plugin/Document';
 
 import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
@@ -41,7 +42,8 @@ export const System = new Loader({
 		CSS,
 		TXT,
 		Json,
-		Node
+		Node,
+		Document
 	},
 	registry: {
 		'@empty': {},
@@ -54,3 +56,7 @@ export const System = new Loader({
 requirex.System = System;
 
 if(!globalSystem) globalEnv.System = System;
+
+if(getTags) {
+	System.import('document!');
+}
