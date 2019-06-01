@@ -6,7 +6,7 @@ export const globalEnv: { [name: string]: any } = typeof self == 'object' ? self
 
 const isNode = (
 	typeof process == 'object' &&
-	Object.prototype.toString.call(process) == '[object process]'
+	({}).toString.call(process) == '[object process]'
 );
 
 let isES6: boolean;

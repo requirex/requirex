@@ -1,13 +1,14 @@
 import { Record } from '../Record';
-import { Loader, LoaderPlugin } from '../Loader';
+import { LoaderPlugin } from '../Loader';
+import { getTags } from '../platform';
 
 /** CSS loader plugin. */
 
 export class CSS implements LoaderPlugin {
 
 	instantiate(record: Record) {
-		if(typeof document != 'object' || !document.createElement) return;
-		const head = document.getElementsByTagName('head')[0];
+		if(!getTags) return;
+		const head = getTags('head')[0];
 
 		// Inject as a style element if transpiled.
 		// Relative URLs must be fixed by the transpiler.

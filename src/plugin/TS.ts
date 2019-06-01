@@ -68,8 +68,6 @@ export class TS implements LoaderPlugin {
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
 			}
 
-			let transpiled: string | undefined;
-
 			const info = ts.preProcessFile(record.sourceCode, true, true);
 
 			for(let ref of info.referencedFiles.concat(info.importedFiles)) {
