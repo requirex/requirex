@@ -104,7 +104,7 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 
 export class Loader implements LoaderPlugin {
 
-	constructor(public config?: LoaderConfig) {
+	constructor(config?: LoaderConfig) {
 		config = config || {};
 
 		this.cwd = (
@@ -114,10 +114,16 @@ export class Loader implements LoaderPlugin {
 			'/'
 		);
 
-		this.baseURL = config.baseURL || (origin &&
+		this.baseURL = (origin &&
 			// TODO: Make sure a slash is added always when missing. Maybe cwd is a drive letter?
 			origin + this.cwd + (this.cwd == '/' ? '' : '/')
 		);
+
+		this.config(config);
+	}
+
+	config(config: LoaderConfig) {
+		if(config.baseURL) this.baseURL = config.baseURL;
 
 		const registry = config.registry || {};
 
