@@ -81,6 +81,8 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 			(new Error().stack as any as NodeJS.CallSite[])[2].getFileName() || ''
 		);
 
+		if(!loader.firstParent) loader.firstParent = parent;
+
 		Error[hook] = prepareStackTrace;
 	}
 
@@ -534,6 +536,7 @@ export class Loader implements LoaderPlugin {
 
 	cwd: string;
 	baseURL?: string;
+	firstParent?: string;
 
 	plugins: { [name: string]: LoaderPlugin } = {};
 
