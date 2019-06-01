@@ -285,29 +285,36 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 	let baseExt: string | undefined;
 	let name: string;
 
+	if(inRegistry(loader, key)) return key;
+
 	let pos = key.lastIndexOf('.') + 1;
 	let ext = key.substr(pos);
 
+	// Add default extension if file has no known extension.
 	if(!(pos && loader.plugins[ext]) && !inRegistry(loader, key)) {
 		pos = key.length + 1;
 		ext = (ref && ref.defaultExt) || 'js';
 		key += '.' + ext;
 	}
 
-	const list: string[] = [ key ];
+	const list: string[] = [];
 
-	if(ext == 'js') {
-		baseExt = baseKey.substr(baseKey.lastIndexOf('.') + 1);
+	if(key.charAt(key.lastIndexOf('/') + 1) != '.') {
+		list.push(key);
 
-		if(baseExt == 'ts') {
-			name = key.substr(0, pos) + 'ts';
-			list.push(name);
-			list.push(name + 'x');
+		if(ext == 'js') {
+			baseExt = baseKey.substr(baseKey.lastIndexOf('.') + 1);
+
+			if(baseExt == 'ts') {
+				name = key.substr(0, pos) + 'ts';
+				list.push(name);
+				list.push(name + 'x');
+			}
 		}
-	}
 
-	if(ext == 'ts') {
-		list.push(key + 'x');
+		if(ext == 'ts') {
+			list.push(key + 'x');
+		}
 	}
 
 	if(ext == 'js') {
@@ -323,7 +330,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 	}
 
 	if(ref.isImport && reRelative.test(importKey)) {
-		return loader.fetch(key).then((res: FetchResponse) =>
+		return loader.fetch(list[0]).then((res: FetchResponse) =>
 			res.text().then((text: string) => {
 				ref.sourceCode = text;
 				return res.url;
@@ -346,6 +353,8 @@ export class NodeResolve implements LoaderPlugin {
 		let resolvedKey = key;
 		let mappedKey: string;
 		let count = 8;
+		let name: string;
+		let path: string;
 
 		do {
 			while(1) {
@@ -368,11 +377,21 @@ export class NodeResolve implements LoaderPlugin {
 				break;
 			}
 
-			const match = key.match(rePackage);
-			if(!match) break;
+			let otherPkg: Package | false | undefined | Promise<Package | false>;
 
-			const name = match[1];
-			const otherPkg = loader.packageNameTbl[name];
+			const match = key.match(rePackage);
+			if(match) {
+				name = match[1];
+				path = match[3];
+				otherPkg = loader.packageNameTbl[name];
+			} else {
+				otherPkg = loader.getPackage(resolvedKey);
+				if(!otherPkg) break;
+				name = otherPkg.name;
+				path = resolvedKey.substr(otherPkg.root.length);
+				if(path == '/') path = '';
+				if(otherPkg == pkg && path) break;
+			}
 
 			if(!(otherPkg instanceof Package)) {
 				// Configuration for referenced package is not currently available.
@@ -391,7 +410,7 @@ export class NodeResolve implements LoaderPlugin {
 
 			pkg = otherPkg;
 			baseKey = otherPkg.root + '/';
-			key = (match[3] || otherPkg.main || 'index.js').replace(/^(\.?\/)?/, './');
+			key = (path || otherPkg.main || 'index.js').replace(/^(\.?\/)?/, './');
 		} while(--count);
 
 		if(!count) {
@@ -456,7 +475,7 @@ export class NodeResolve implements LoaderPlugin {
 			return fetchPackage(
 				loader,
 				[{}],
-				resolvedKey
+				resolvedKey.replace(/\/$/, '')
 			).then((pkg: Package | false | undefined) => {
 				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
 
