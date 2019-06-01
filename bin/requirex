@@ -1,9 +1,14 @@
 #!/usr/bin/env node
 
-const url = require('..').URL;
+var path = require('path');
+var url = require('..').URL;
+
+var resolved = url.fromLocal(path.resolve(process.cwd(), process.argv[2]));
+
+System.config({ baseURL: url.resolve(resolved, '.') });
 
 System.import(
-	url.fromLocal(require('path').resolve(process.cwd(), process.argv[2]))
+	resolved
 ).catch(function(err) {
 	console.error(err);
 	process.exit(1);
