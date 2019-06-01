@@ -62,7 +62,7 @@ export class TS implements LoaderPlugin {
 	constructor(private loader: Loader) { }
 
 	discover(record: Record) {
-		return this.loader.import('typescript').then((ts: typeof _ts) => {
+		return this.loader.import('typescript', this.loader.baseURL || this.loader.firstParent).then((ts: typeof _ts) => {
 			if(!this.tsService) {
 				this.tsHost = createHost(this.loader, ts);
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
