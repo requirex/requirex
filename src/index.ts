@@ -12,6 +12,7 @@ import { Json } from './plugin/Json';
 import { Node } from './plugin/NodeBuiltin';
 import { NodeResolve } from './plugin/NodeResolve';
 import { Document } from './plugin/Document';
+import { Cache } from './plugin/Cache';
 
 import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
@@ -28,6 +29,7 @@ const requirex = internals as typeof internals & { System: Loader };
 const globalSystem = globalEnv.System;
 
 export const System = new Loader({
+	cdn: 'https://cdn.jsdelivr.net/npm/',
 	plugins: {
 		resolve: NodeResolve,
 
@@ -43,7 +45,8 @@ export const System = new Loader({
 		TXT,
 		Json,
 		Node,
-		Document
+		Document,
+		Cache
 	},
 	registry: {
 		'@empty': {},

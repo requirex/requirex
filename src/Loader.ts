@@ -3,7 +3,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin, globalEnv } from './platform';
-import { fetch, FetchResponse } from './fetch';
+import { fetch, FetchResponse, FetchOptions } from './fetch';
 
 const emptyPromise = Promise.resolve();
 
@@ -25,6 +25,7 @@ export interface LoaderPlugin {
 
 export interface LoaderConfig {
 	baseURL?: string;
+	cdn?: string;
 	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
 	registry?: { [name: string]: any };
 }
@@ -126,6 +127,10 @@ export class Loader implements LoaderPlugin {
 
 	config(config: LoaderConfig) {
 		if(config.baseURL) this.baseURL = config.baseURL;
+		if(config.cdn) {
+			this.repoTbl[config.cdn] = true;
+			this.cdn = config.cdn;
+		}
 
 		const registry = config.registry || {};
 
@@ -200,20 +205,30 @@ export class Loader implements LoaderPlugin {
 		).then((resolvedKey: string) => handleExtension(this, resolvedKey, ref));
 	}
 
-	fetch(url: string) {
-		return fetch(url).then((
+	fetch(url: string, options?: FetchOptions) {
+		const plugin = this.plugins['cache'];
+
+		return (
+			(plugin && plugin.fetch ? plugin.fetch : fetch).call(
+				plugin,
+				url,
+				options
+			) as Promise<FetchResponse>
+		).then((
 			(res) => res.ok ? res : Promise.reject(res)
 		) as (res: FetchResponse) => FetchResponse);
 	}
 
 	fetchRecord(record: Record) {
-		const fetched = this.fetch(record.resolvedKey).then(
-			(res: FetchResponse) => res.text()
-		).then((text: string) => {
-			record.sourceCode = text;
-		});
+		const plugin = this.plugins[record.format!];
 
-		return fetched;
+		return plugin && plugin.fetchRecord ? plugin.fetchRecord(record) : (
+			this.fetch(record.resolvedKey).then(
+				(res: FetchResponse) => res.text()
+			).then((text: string) => {
+				record.sourceCode = text;
+			})
+		);
 	}
 
 	/** Resolve and translate an imported dependency and its recursive dependencies.
@@ -295,10 +310,7 @@ export class Loader implements LoaderPlugin {
 			if(ref.sourceCode) {
 				record.sourceCode = ref.sourceCode;
 			} else {
-				const plugin = this.plugins[record.format!] || this;
-				fetched = (
-					plugin.fetchRecord ? plugin : this
-				).fetchRecord!(record);
+				fetched = this.fetchRecord(record);
 			}
 
 			record.discovered = fetched.then(
@@ -527,6 +539,7 @@ export class Loader implements LoaderPlugin {
 	  * resolve to the same result as their parent directory does). */
 	packageRootTbl: { [resolvedRoot: string]: Package | false | Promise<Package | false> } = {};
 	repoTbl: { [resolvedPath: string]: true } = {}
+	cdn: string;
 
 	registry: { [resolvedKey: string]: ModuleType } = {};
 

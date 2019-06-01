@@ -4,24 +4,41 @@ import * as HTTP from 'http';
 import { URL } from './URL';
 import { features, nodeRequire } from './platform';
 
+export interface FetchOptions {
+	method?: string;
+}
+
+export type FetchHeaders = { [key: string]: string };
+
 /** Subset of a WhatWG fetch response relevant for script loaders. */
 
 export class FetchResponse {
 	constructor(
 		public status: number | undefined,
 		public url: string,
-		private getHeader: (name: string) => string | null | undefined,
-		private data?: string | false
+		private _headers: FetchHeaders,
+		private _text?: string | false
 	) {
 		this.ok = status == 200;
 	}
 
 	text() {
-		return Promise.resolve(this.data || '');
+		return Promise.resolve(this._text || '');
 	}
 
 	ok: boolean;
-	headers = { get: this.getHeader };
+	headers = {
+		get: (name: string) => this._headers[name],
+		forEach: (handler: (value: string, name: string) => void, self?: any) => {
+			const headers = this._headers;
+
+			for(let name in headers) {
+				if(headers.hasOwnProperty(name)) {
+					handler.call(self, headers[name], name);
+				}
+			}
+		}
+	};
 }
 
 /** Table of HTTP status codes redirecting the client to another URL. */
@@ -43,13 +60,34 @@ const nodeErrors: { [name: string]: number } = {
 
 const empty: { [name: string]: string } = {};
 
-function nodeHeaders(headers?: HTTP.IncomingHttpHeaders) {
-	return (name: string) => {
-		const value = (headers || empty)[name.toLowerCase()];
-		return value && (
-			typeof value == 'string' ? value : value.join(',')
-		);
+function parseHeadersXHR(headers: string) {
+	const result: FetchHeaders = {};
+
+	for(let header of headers.replace(/\r?\n[\t ]+/g, ' ').split(/\r?\n/)) {
+		const match = header.match(/\s*([^:]+):\s*(.*)/);
+
+		if(match) {
+			const key = match[1].toLowerCase();
+			const prev = result[key];
+			result[key] = (prev ? prev + ', ' : '') + match[2];
+		}
 	}
+
+	return result;
+}
+
+function parseHeadersNode(headers: HTTP.IncomingHttpHeaders) {
+	const result: FetchHeaders = {};
+
+	for(let name in headers) {
+		if(headers.hasOwnProperty(name)) {
+			const key = name.toLowerCase();
+			const prev = result[key];
+			result[key] = (prev ? prev + ', ' : '') + headers[name];
+		}
+	}
+
+	return result;
 }
 
 function nodeFetchFile(
@@ -70,7 +108,7 @@ function nodeFetchFile(
 				data = handler(data) as any;
 			}
 
-			resolve(new FetchResponse(status, key, nodeHeaders(), data as any));
+			resolve(new FetchResponse(status, key, {}, data as any));
 		};
 	}
 
@@ -115,7 +153,12 @@ export function nodeFetch(key: string, options: HTTP.RequestOptions, ttl = 3) {
 
 		const req = http.request(parsed, (res: HTTP.IncomingMessage) => {
 			function finish(data?: string) {
-				resolve(new FetchResponse(res.statusCode, key, nodeHeaders(res.headers), data));
+				resolve(new FetchResponse(
+					res.statusCode,
+					key,
+					parseHeadersNode(res.headers),
+					data
+				));
 			}
 
 			if(res.statusCode == 200) {
@@ -151,7 +194,7 @@ export function nodeFetch(key: string, options: HTTP.RequestOptions, ttl = 3) {
 
 /** Partial WhatWG fetch implementation for script loaders. */
 
-export function fetch(key: string, options?: { method?: string }) {
+export function fetch(key: string, options?: FetchOptions) {
 	options = options || {};
 	console.log('FETCH', options.method, key);
 
@@ -168,7 +211,7 @@ export function fetch(key: string, options?: { method?: string }) {
 					resolve(new FetchResponse(
 						xhr.status,
 						xhr.responseURL || key,
-						(name: string) => xhr.getResponseHeader(name),
+						parseHeadersXHR(xhr.getAllResponseHeaders()),
 						xhr.status == 200 && xhr.responseText
 					));
 				}
