@@ -1,11 +1,10 @@
 import { URL, skipSlashes, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
-import { fetch, FetchResponse } from '../fetch';
+import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
 import { features } from '../platform';
 
-const emptyPromise = Promise.resolve();
 const nodeModules = '/node_modules/';
 
 // Relative path.
@@ -84,7 +83,7 @@ export function getRepoPaths(loader: Loader, basePkgName: string | false, baseKe
 		if(chunk != nodeModules) addRepo(end, nodeModules);
 	} while(end > start);
 
-	resultOther.push({ preferred: true, root: 'https://cdn.jsdelivr.net/npm/' });
+	resultOther.push({ preferred: true, root: loader.cdn });
 
 	return resultPreferred.concat(resultOther);
 }
@@ -124,16 +123,16 @@ function parsePackage(rootKey: string, data: string, name?: string) {
 	return pkg;
 }
 
-function ifExists(key: string) {
+function ifExists(loader: Loader, key: string) {
 	// TODO: Fail for wrong MIME type (mainly html error messages).
-	return fetch(key, { method: 'HEAD' }).then((res) => res.url);
+	return loader.fetch(key, { method: 'HEAD' }).then((res) => res.url);
 }
 
-function ifExistsList(list: string[], pos: number): Promise<string> {
+function ifExistsList(loader: Loader, list: string[], pos: number): Promise<string> {
 	const key = list[pos];
 	if(!key) return Promise.reject(new Error('Error fetching ' + list[0]));
 
-	return ifExists(list[pos]).catch(() => ifExistsList(list, pos + 1));
+	return ifExists(loader, list[pos]).catch(() => ifExistsList(loader, list, pos + 1));
 }
 
 function parseFetchedPackage(
@@ -178,11 +177,11 @@ function fetchPackage(
 		parsed = Promise.reject(parsed);
 	} else if(!parsed) {
 		const jsonKey = repoKey + name + '/package.json';
-		const fetched = repo.preferred ? fetch(jsonKey) : ifExists(jsonKey).then((key: string) => {
+		const fetched = repo.preferred ? loader.fetch(jsonKey) : ifExists(loader, jsonKey).then((key: string) => {
 			// A repository was found so look for additional packages there
 			// before other addresses.
 			if(repoKey) loader.repoTbl[repoKey] = true;
-			return fetch(key);
+			return loader.fetch(key);
 		});
 
 		parsed = parseFetchedPackage(loader, repoKey + name, fetched, name);
@@ -335,10 +334,10 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 				ref.sourceCode = text;
 				return res.url;
 			})
-		).catch(() => ifExistsList(list, 1));
+		).catch(() => ifExistsList(loader, list, 1));
 	}
 
-	return ifExistsList(list, 0);
+	return ifExistsList(loader, list, 0);
 }
 
 /** Node.js module lookup plugin. */
