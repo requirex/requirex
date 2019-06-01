@@ -51,6 +51,8 @@ export class Document implements LoaderPlugin {
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
 			const type = element.type;
 			if(type && type.substr(0, 5) == 'x-req') {
+				element.setAttribute('type', '-' + type);
+
 				if(element.src) {
 					record.addDep(URL.resolve(origin, element.src));
 				} else {
