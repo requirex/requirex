@@ -177,12 +177,14 @@ function fetchPackage(
 		parsed = Promise.reject(parsed);
 	} else if(!parsed) {
 		const jsonKey = repoKey + name + '/package.json';
-		const fetched = repo.preferred ? loader.fetch(jsonKey) : ifExists(loader, jsonKey).then((key: string) => {
-			// A repository was found so look for additional packages there
-			// before other addresses.
-			if(repoKey) loader.repoTbl[repoKey] = true;
-			return loader.fetch(key);
-		});
+		const fetched = repo.preferred ? loader.fetch(jsonKey) : (
+			ifExists(loader, jsonKey).then((key: string) => {
+				// A repository was found so look for additional packages there
+				// before other addresses.
+				if(repoKey) loader.repoTbl[repoKey] = true;
+				return loader.fetch(key);
+			})
+		);
 
 		parsed = parseFetchedPackage(loader, repoKey + name, fetched, name);
 	}

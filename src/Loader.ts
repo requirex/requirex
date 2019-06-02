@@ -351,11 +351,11 @@ export class Loader implements LoaderPlugin {
 		}
 	}
 
-	translate(record: Record): Promise<void> | void {
+	translate(record: Record): Promise<void> {
 		const format = record.format;
 
 		// Avoid translating code twice using the same format.
-		if(record.translated == format) return;
+		if(record.translated == format) return emptyPromise;
 		record.translated = format;
 
 		const plugin = this.plugins[format!];
@@ -378,6 +378,8 @@ export class Loader implements LoaderPlugin {
 				id: record.resolvedKey
 			};
 		}
+
+		return emptyPromise;
 	}
 
 	instantiate(record: Record) {
@@ -490,6 +492,8 @@ export class Loader implements LoaderPlugin {
 	}
 
 	built(version: number, specList: BuiltSpec[]) {
+		if(version != 1) throw(new Error('Unsupported bundle format'));
+
 		const recordList: Record[] = [];
 		const depsList: { [importKey: string]: number }[] = [];
 		let num = 0;
