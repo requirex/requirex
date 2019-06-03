@@ -545,6 +545,12 @@ export class Loader implements LoaderPlugin {
 	repoTbl: { [resolvedPath: string]: true } = {}
 	cdn: string;
 
+	/** Paths to node-modules directories containing modules under development,
+	  * to avoid aggressively caching their contents and better support
+	  * boennemann/alle. */
+
+	modulesBustTbl: { [resolvedRoot: string]: boolean } = {};
+
 	registry: { [resolvedKey: string]: ModuleType } = {};
 
 	/** Pending imports. */

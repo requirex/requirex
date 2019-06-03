@@ -1,7 +1,10 @@
 import { fetch, FetchOptions, FetchHeaders, FetchResponse } from '../fetch';
-import { ModuleFormat } from '../Record';
+import { Record, ModuleFormat } from '../Record';
+import { skipSlashes } from '../URL';
 import { Loader } from '../Loader';
-import { features } from '../platform';
+import { features, origin } from '../platform';
+
+const nodeModules = '/node_modules/';
 
 const prefixMeta = 'requirex:meta:';
 const prefixText = 'requirex:text:';
@@ -14,6 +17,13 @@ export interface CacheMeta {
 	headers: FetchHeaders;
 	format?: ModuleFormat;
 	deps?: string[];
+}
+
+function subClone<Type extends Object>(obj: Type): Type {
+	function Child() {}
+	Child.prototype = obj;
+
+	return new (Child as any)();
 }
 
 // TODO: Storage "polyfill" for Node, using require.resolve('requirex/cache') or os.tmpdir()
@@ -94,21 +104,49 @@ export class Cache {
 		let fetched = this.dataTbl[resolvedKey] || (isHead && this.headTbl[resolvedKey]);
 
 		if(!fetched) {
-			// TODO: Avoid caching files from current domain unless they are
-			// inside npm packages. Otherwise maybe bust browser cache?
-			// Also try to support boennemann/alle somehow...
+			let useStorage = !!this.storage;
+			let key = resolvedKey;
+			let bust: string;
+			const loader = this.loader;
+			const local = origin || loader.firstParent;
 
-			/* const pos = skipSlashes(resolvedKey, 0, 3);
-			let origin = pos > 0 && resolvedKey.substr(0, pos);
+			// Avoid caching files from current domain unless they are inside
+			// npm packages.
 
-			if(origin != this.origin) {
-				// ...
-			} */
+			if(useStorage && local) {
+				const posOrigin = skipSlashes(resolvedKey, 0, 3);
+				const posModules = key.lastIndexOf(nodeModules);
 
-			if(this.storage) {
-				fetched = this.fetchStorage(resolvedKey, options, isHead);
+				if(posOrigin > 0 &&
+					key.substr(0, posOrigin) == (local + '/').substr(0, posOrigin) && (
+						posModules < 0 ||
+						loader.modulesBustTbl[key.substr(0, posModules + nodeModules.length)]
+					)
+				) {
+					useStorage = false;
+					// Bust browser cache.
+					bust = 'RequirexCacheBust=' + Math.random();
+					key += (key.indexOf('?') >= 0 ? '&' : '?') + bust;
+				}
+			}
+
+			if(useStorage) {
+				fetched = this.fetchStorage(key, options, isHead);
 			} else {
-				fetched = fetch(resolvedKey, options);
+				fetched = fetch(key, options).then((res: FetchResponse) => {
+					if(!bust) return res;
+
+					// Remove cache bust parameter, work around read-only url
+					// property in native fetch.
+					const result = subClone(res);
+
+					result.url = res.url.replace(
+						new RegExp('([&?])' + bust + '(&?)'),
+						(match: string, before: string, after: string) => after && before
+					);
+
+					return result;
+				});
 			}
 
 			(isHead ? this.headTbl : this.dataTbl)[resolvedKey] = fetched;
@@ -121,7 +159,6 @@ export class Cache {
 		// ...
 	}
 
-	origin: string | false;
 	storage?: Storage;
 
 	headTbl: { [resolvedKey: string]: Promise<FetchResponse> } = {};
