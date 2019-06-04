@@ -46,7 +46,7 @@ export class Document implements LoaderPlugin {
 	}
 
 	discover(record: Record) {
-		let num = 1;
+		let num = 0;
 
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
 			const type = element.type;
@@ -54,7 +54,9 @@ export class Document implements LoaderPlugin {
 				if(element.src) {
 					record.addDep(URL.resolve(origin, element.src));
 				} else {
-					record.addDep(URL.resolve(origin, '#' + num++ + '.js'), {
+					++num;
+
+					record.addDep(URL.resolve(origin, '#' + num + '.js'), {
 						format: 'js',
 						sourceCode: element.text
 					});

@@ -167,9 +167,8 @@ function fetchPackage(
 	loader: Loader,
 	repoList: { preferred?: boolean, root?: string }[],
 	name: string,
-	repoNum?: number
+	repoNum = 0
 ): Promise<Package | false> {
-	repoNum = repoNum || 0;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
 
@@ -190,7 +189,7 @@ function fetchPackage(
 	}
 
 	return Promise.resolve<Package | false>(parsed).catch(
-		() => ++repoNum! < repoList.length ? fetchPackage(loader, repoList, name, repoNum) : false
+		() => ++repoNum < repoList.length ? fetchPackage(loader, repoList, name, repoNum) : false
 	);
 }
 
@@ -341,9 +340,9 @@ export class NodeResolve implements LoaderPlugin {
 
 	constructor(private loader: Loader) { }
 
-	resolveSync(key: string, baseKey?: string, ref?: DepRef) {
+	resolveSync(key: string, baseKey: string, ref?: DepRef) {
 		const loader = this.loader;
-		let pkg = loader.getPackage(baseKey!) || loader.package;
+		let pkg = loader.getPackage(baseKey) || loader.package;
 		let resolvedKey = key;
 		let mappedKey: string;
 		let count = 8;
@@ -353,7 +352,7 @@ export class NodeResolve implements LoaderPlugin {
 				mappedKey = pkg.map[key];
 
 				if(!mappedKey) {
-					resolvedKey = URL.resolve(baseKey!, key);
+					resolvedKey = URL.resolve(baseKey, key);
 					// TODO: Handle default extensions and possible wildcards.
 					mappedKey = pkg.map[resolvedKey];
 				}
@@ -406,12 +405,10 @@ export class NodeResolve implements LoaderPlugin {
 		return resolvedKey;
 	}
 
-	resolve(key: string, baseKey: string, ref?: DepRef): Promise<string> {
+	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
 		const loader = this.loader;
 		let resolvedKey: string;
 		let packageName: string | undefined;
-
-		ref = ref || {};
 
 		// Find a package containing baseKey, to get browser path and
 		// package mappings and versions.
@@ -420,7 +417,7 @@ export class NodeResolve implements LoaderPlugin {
 			const parentPackageName = basePkg && basePkg.name;
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
 
-			packageName = ref!.pendingPackageName;
+			packageName = ref.pendingPackageName;
 
 			if(packageName) {
 				parsed = loader.packageNameTbl[packageName];
@@ -432,13 +429,13 @@ export class NodeResolve implements LoaderPlugin {
 						packageName
 					);
 
-					loader.packageNameTbl[packageName!] = parsed as Promise<Package | false>;
+					loader.packageNameTbl[packageName] = parsed as Promise<Package | false>;
 				}
 			}
 
 			return parsed;
 		}).then((pkg: Package | false | undefined) => {
-			const plugin = ref!.format && loader.plugins[ref!.format];
+			const plugin = ref.format && loader.plugins[ref.format];
 
 			if(plugin) {
 				if(plugin.resolve) return plugin.resolve(key, baseKey, ref);
@@ -450,9 +447,9 @@ export class NodeResolve implements LoaderPlugin {
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
 			}
 
-			if(ref!.sourceCode) return resolvedKey;
+			if(ref.sourceCode) return resolvedKey;
 
-			return checkFile(loader, resolvedKey, key, baseKey, ref!);
+			return checkFile(loader, resolvedKey, key, baseKey, ref);
 		}).catch((err: any) => {
 			if(packageName) return Promise.reject(err);
 
@@ -464,7 +461,7 @@ export class NodeResolve implements LoaderPlugin {
 				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
 
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
-				return checkFile(loader, resolvedKey, key, baseKey, ref!);
+				return checkFile(loader, resolvedKey, key, baseKey, ref);
 			});
 		});
 

@@ -11,7 +11,7 @@ export interface LoaderPlugin {
 	fetchRecord?(record: Record): Promise<void>;
 	fetch?(url: string): Promise<FetchResponse>;
 
-	resolveSync?(key: string, baseKey?: string, ref?: DepRef): string;
+	resolveSync?(key: string, baseKey: string, ref?: DepRef): string;
 	resolve?(key: string, baseKey: string, ref?: DepRef): Promise<string> | string;
 
 	discover?(record: Record): Promise<void> | void;
