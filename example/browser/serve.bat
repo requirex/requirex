@@ -1,7 +1,6 @@
-echo ; alias goto=true ; alias function=true # > NUL
-echo ; function goto { true; } # > NUL
-
-goto win
+echo \
+@goto win \
+> /dev/null
 
 command -v busybox > /dev/null && {
 	busybox httpd -fp 8080 &&
