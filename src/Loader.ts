@@ -220,7 +220,9 @@ export class Loader implements LoaderPlugin {
 	}
 
 	fetchRecord(record: Record) {
-		const plugin = this.plugins[record.format!];
+		let plugin = this.plugins[record.format!];
+
+		if(!plugin || !plugin.fetchRecord) plugin = this.plugins['cache'];
 
 		return plugin && plugin.fetchRecord ? plugin.fetchRecord(record) : (
 			this.fetch(record.resolvedKey).then(
