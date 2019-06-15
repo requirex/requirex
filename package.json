@@ -12,7 +12,7 @@
   "scripts": {
     "tsc": "tsc",
     "rollup": "rollup",
-    "start": "./example/browser/serve.bat",
+    "start": "./example/browser/serve.bat || example\\browser\\serve.bat",
     "example": "node bin/requirex ./example/node/test.ts",
     "watch": "cd src && tsc --watch",
     "build:umd": "cd src && tsc -m es6 --outdir ../dist/esm && rollup -c && uglifyjs ../dist/umd/index.js -c -m > ../dist/umd/index.min.js",
