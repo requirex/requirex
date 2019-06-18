@@ -15,17 +15,17 @@ export class Register implements LoaderPlugin {
 			id: record.resolvedKey
 		};
 
-		record.wrapArgs(record.globalTbl, {
+		record.setArgs(record.globalTbl, {
 			'System': loader
 		});
 
 		loader.latestRecord = record;
 
 		try {
-			const compiled = globalEval(record.sourceCode);
+			const compiled = globalEval(record.wrap());
 
 			// Call imported module.
-			compiled.apply(globalEnv, record.evalArgs);
+			compiled.apply(globalEnv, record.argValues);
 		} catch(err) {
 			record.loadError = err;
 		}
@@ -54,6 +54,10 @@ export class Register implements LoaderPlugin {
 		if(spec.execute) spec.execute();
 
 		return record.moduleInternal.exports;
+	}
+
+	wrap(record: Record) {
+		return record.wrap();
 	}
 
 }

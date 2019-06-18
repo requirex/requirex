@@ -151,15 +151,15 @@ export class AMD implements LoaderPlugin {
 		const define = globalEnv.define;
 		globalEnv.define = this.amdDefine;
 		this.loader.latestRecord = record;
-		record.wrapArgs(record.globalTbl, {
+		record.setArgs(record.globalTbl, {
 			'define': this.amdDefine
 		});
 
 		try {
-			const compiled = globalEval(record.sourceCode);
+			const compiled = globalEval(record.wrap());
 
 			// Call imported module.
-			compiled.apply(globalEnv, record.evalArgs);
+			compiled.apply(globalEnv, record.argValues);
 
 			// If only one module was defined but with a strange key not
 			// matching the file name, assume it was still meant as the exports.
@@ -217,7 +217,7 @@ export class AMD implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return record.sourceCode;
+		return record.wrap();
 	}
 
 }
