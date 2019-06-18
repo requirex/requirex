@@ -5,7 +5,7 @@ import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
 	interface Record {
-		tsSnapshot: _ts.IScriptSnapshot
+		tsSnapshot?: _ts.IScriptSnapshot;
 	}
 }
 
@@ -15,10 +15,10 @@ function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			target: ts.ScriptTarget.ES5,
-			// module: ts.ModuleKind.CommonJS
+			module: ts.ModuleKind.CommonJS
 			// module: ts.ModuleKind.AMD
 			// module: ts.ModuleKind.UMD
-			module: ts.ModuleKind.System
+			// module: ts.ModuleKind.System
 		}),
 		getScriptFileNames: () => {
 			const keys: string[] = [];
@@ -62,6 +62,7 @@ export class TS implements LoaderPlugin {
 	constructor(private loader: Loader) { }
 
 	discover(record: Record) {
+		// console.log('NEED TYPESCRIPT', record.resolvedKey);
 		return this.loader.import('typescript', this.loader.baseURL || this.loader.firstParent).then((ts: typeof _ts) => {
 			if(!this.tsService) {
 				this.tsHost = createHost(this.loader, ts);
@@ -69,6 +70,8 @@ export class TS implements LoaderPlugin {
 			}
 
 			const info = ts.preProcessFile(record.sourceCode, true, true);
+
+			record.depList = [];
 
 			for(let ref of info.referencedFiles.concat(info.importedFiles)) {
 				record.addDep(ref.fileName);

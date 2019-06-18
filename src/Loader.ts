@@ -18,6 +18,8 @@ export interface LoaderPlugin {
 
 	translate?(record: Record): Promise<void> | void;
 
+	update?(record: Record): Promise<void> | void;
+
 	instantiate?(record: Record): any;
 
 	wrap?(record: Record): string;
@@ -94,9 +96,10 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		// Detect and resolve all recursive dependencies.
 		loader.discoverRecursive(resolvedKey, importKey, ref!, instantiate).then(
 			// Instantiate after translating all detected dependencies.
-			(record: Record) => Promise.all(
-				record.deepDepList.map((record: Record) => loader.translate(record))
-			).then(
+			// TODO: Make sure this does not get executed multiple times for the same record!
+			(record: Record) => Promise.all(record.deepDepList.map(
+				(record: Record) => loader.translate(record).then(() => loader.update(record))
+			)).then(
 				() => instantiate ? loader.instantiate(record) : record
 			)
 		)
@@ -224,13 +227,21 @@ export class Loader implements LoaderPlugin {
 
 		if(!plugin || !plugin.fetchRecord) plugin = this.plugins['cache'];
 
-		return plugin && plugin.fetchRecord ? plugin.fetchRecord(record) : (
-			this.fetch(record.resolvedKey).then(
+		if(plugin && plugin.fetchRecord) return plugin.fetchRecord(record);
+
+		let fetched: Promise<string>;
+
+		if(record.sourceCode) {
+			fetched = Promise.resolve(record.sourceCode);
+		} else {
+			fetched = this.fetch(record.resolvedKey).then(
 				(res: FetchResponse) => res.text()
-			).then((text: string) => {
-				record.sourceCode = text;
-			})
-		);
+			);
+		}
+
+		return fetched.then((text: string) => {
+			record.sourceCode = text;
+		});
 	}
 
 	/** Resolve and translate an imported dependency and its recursive dependencies.
@@ -308,14 +319,9 @@ export class Loader implements LoaderPlugin {
 			let fetched = emptyPromise;
 
 			record.format = ref.format as any;
+			if(ref.sourceCode) record.sourceCode = ref.sourceCode;
 
-			if(ref.sourceCode) {
-				record.sourceCode = ref.sourceCode;
-			} else {
-				fetched = this.fetchRecord(record);
-			}
-
-			record.discovered = fetched.then(
+			record.discovered = this.fetchRecord(record).then(
 				() => this.discover(record)
 			).catch((err: NodeJS.ErrnoException) => {
 				if(err && err.message) {
@@ -382,6 +388,12 @@ export class Loader implements LoaderPlugin {
 		}
 
 		return emptyPromise;
+	}
+
+	update(record: Record) {
+		const plugin = this.plugins['cache'];
+
+		if(plugin && plugin.update) return plugin.update(record);
 	}
 
 	instantiate(record: Record) {

@@ -45,7 +45,7 @@ export class CJS implements LoaderPlugin {
 			require: cjsRequire
 		};
 
-		record.wrapArgs(record.globalTbl, {
+		record.setArgs(record.globalTbl, {
 			'require': moduleInternal.require,
 			'exports': moduleInternal.exports,
 			'module': moduleInternal,
@@ -63,7 +63,7 @@ export class CJS implements LoaderPlugin {
 		if(!compiled) {
 			try {
 				// Compile module into a function under global scope.
-				compiled = globalEval(record.sourceCode);
+				compiled = globalEval(record.wrap());
 			} catch(err) {
 				record.loadError = err;
 				throw err;
@@ -78,7 +78,7 @@ export class CJS implements LoaderPlugin {
 
 		try {
 			// Call imported module.
-			compiled.apply(moduleInternal.exports, record.evalArgs);
+			compiled.apply(moduleInternal.exports, record.argValues);
 			moduleInternal.loaded = true;
 		} catch(err) {
 			error = err;
@@ -93,7 +93,7 @@ export class CJS implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return record.sourceCode;
+		return record.wrap();
 	}
 
 }

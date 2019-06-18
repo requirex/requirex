@@ -50,8 +50,8 @@ export class Record {
 		this.depTbl[key] = ref;
 	}
 
-	wrapArgs(...defs: { [name: string]: any }[]) {
-		const argNames: string[] = [];
+	setArgs(...defs: { [name: string]: any }[]) {
+		const argNames = [];
 		const args: { [name: string]: any } = {};
 
 		for(let def of defs) {
@@ -65,14 +65,17 @@ export class Record {
 
 		argNames.sort();
 
-		this.sourceCode = this.sourceCode && (
-			'(function(' + argNames.join(', ') + ') {\n' +
+		this.argNames = argNames;
+		this.argValues = argNames.map((name: string) => args[name]);
+	}
+
+	wrap() {
+		return this.sourceCode && (
+			'(function(' + this.argNames.join(', ') + ') {\n' +
 			this.sourceCode +
 			// Break possible source map comment on the last line.
 			'\n})'
 		);
-
-		this.evalArgs = argNames.map((name: string) => args[name]);
 	}
 
 	/** Autodetected or configured format of the module. */
@@ -111,7 +114,9 @@ export class Record {
 	/** Source code wrapped and compiled into an executable function. */
 	compiled: ModuleFactory;
 	factory: ModuleFactory;
-	evalArgs: any[];
+
+	argNames: string[];
+	argValues: any[];
 
 	/** Index within bundle if applicable. */
 	num?: number;

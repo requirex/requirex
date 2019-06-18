@@ -7,10 +7,6 @@ import { features } from '../platform';
 
 const nodeModules = '/node_modules/';
 
-// Relative path.
-const reRelative = /^\.\.?(\/|$)/;
-// Absolute URL.
-// const reAbsolute = /^[a-z]+:\/\//;
 // Valid npm package name.
 const reName = '[0-9a-z][-_.0-9a-z]*';
 const rePackage = new RegExp(
@@ -330,7 +326,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 		if(inRegistry(loader, key)) return key;
 	}
 
-	if(ref.isImport && reRelative.test(importKey)) {
+	if(ref.isImport && !rePackage.test(importKey)) {
 		return loader.fetch(list[0]).then((res: FetchResponse) =>
 			res.text().then((text: string) => {
 				ref.sourceCode = text;
