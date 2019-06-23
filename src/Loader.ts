@@ -316,8 +316,6 @@ export class Loader implements LoaderPlugin {
 		base.deepDepList.push(record);
 
 		if(!record.discovered) {
-			let fetched = emptyPromise;
-
 			record.format = ref.format as any;
 			if(ref.sourceCode) record.sourceCode = ref.sourceCode;
 

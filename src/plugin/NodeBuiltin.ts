@@ -70,8 +70,10 @@ export class Node implements LoaderPlugin {
 	}
 
 	instantiate(record: Record) {
+		const key = record.resolvedKey;
+
 		return record.moduleInternal.exports = (
-			features.isNode ? nodeRequire(record.resolvedKey) : this.nodeShims[record.resolvedKey] || {}
+			features.isNode ? nodeRequire(key) : this.nodeShims[key] || {}
 		);
 	}
 
