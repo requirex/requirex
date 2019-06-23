@@ -2,7 +2,7 @@ import * as FS from 'fs';
 import * as HTTP from 'http';
 
 import { URL } from './URL';
-import { features, nodeRequire } from './platform';
+import { features, nodeRequire, assign } from './platform';
 
 export interface FetchOptions {
 	method?: string;
@@ -58,8 +58,6 @@ const nodeErrors: { [name: string]: number } = {
 	EPERM: 403
 };
 
-const empty: { [name: string]: string } = {};
-
 function parseHeadersXHR(headers: string) {
 	const result: FetchHeaders = {};
 
@@ -97,7 +95,6 @@ function nodeFetchFile(
 	reject: (err: any) => void
 ) {
 	let status = 200;
-	let text: string | undefined;
 
 	function handleErr<Type>(handler?: (data: Type) => void) {
 		return (err: NodeJS.ErrnoException | null, data: Type) => {
@@ -145,11 +142,7 @@ export function nodeFetch(key: string, options: HTTP.RequestOptions, ttl = 3) {
 		const http: typeof HTTP = nodeRequire(proto);
 		const parsed: HTTP.RequestOptions = nodeRequire('url').parse(key);
 
-		for(let key in options) {
-			if(options.hasOwnProperty(key)) {
-				(parsed as any)[key] = (options as any)[key];
-			}
-		}
+		assign(parsed, options);
 
 		const req = http.request(parsed, (res: HTTP.IncomingMessage) => {
 			function finish(data?: string) {

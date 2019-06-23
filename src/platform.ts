@@ -40,6 +40,16 @@ export const origin = (typeof window == 'object' &&
 	) : ''
 );
 
+export function assign(dst: { [key: string]: any }, src: { [key: string]: any }) {
+	for(let name in src) {
+		if(src.hasOwnProperty(name)) {
+			dst[name] = src[name];
+		}
+	}
+
+	return(dst);
+}
+
 const nodeRegistry: { [name: string]: any } = {};
 const req = typeof require == 'function' && require;
 
