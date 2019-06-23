@@ -2,7 +2,7 @@ import { URL, getDir } from './URL';
 import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, globalEnv } from './platform';
+import { features, origin, assign } from './platform';
 import { fetch, FetchResponse, FetchOptions } from './fetch';
 
 const emptyPromise = Promise.resolve();
@@ -28,6 +28,7 @@ export interface LoaderPlugin {
 export interface LoaderConfig {
 	baseURL?: string;
 	cdn?: string;
+	globals?: { [name: string]: any };
 	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
 	registry?: { [name: string]: any };
 }
@@ -151,6 +152,8 @@ export class Loader implements LoaderPlugin {
 				this.plugins[name.toLowerCase()] = plugin;
 			}
 		}
+
+		assign(this.globalTbl, config.globals || {});
 	}
 
 	/** @param key Name of module or file to import, may be a relative path.
@@ -341,12 +344,8 @@ export class Loader implements LoaderPlugin {
 	discover(record: Record): Promise<void> | void {
 		const format = record.format;
 		const plugin = this.plugins[format!];
-		const process = features.isNode ? globalEnv.process : {
-			'cwd': () => this.cwd,
-			'env': { 'NODE_ENV': 'production' }
-		};
 
-		record.globalTbl = { process };
+		record.addGlobals(this.globalTbl);
 
 		if(plugin && plugin.discover) {
 			return Promise.resolve(
@@ -520,7 +519,7 @@ export class Loader implements LoaderPlugin {
 			this.packageRootTbl[pkg.root] = pkg;
 
 			for(let [key, format, deps, compiled] of pkgSpec.files) {
-				const resolvedKey = URL.resolve(pkg.root + '/', key);
+				const resolvedKey = !pkg.root ? key : URL.resolve(pkg.root + '/', key);
 				const record = new Record(this, resolvedKey);
 
 				record.format = format;
@@ -544,6 +543,8 @@ export class Loader implements LoaderPlugin {
 				}
 			}
 
+			record.addGlobals(this.globalTbl);
+
 			this.translate(record);
 		}
 	}
@@ -562,6 +563,8 @@ export class Loader implements LoaderPlugin {
 	  * boennemann/alle. */
 
 	modulesBustTbl: { [resolvedRoot: string]: boolean } = {};
+
+	globalTbl: { [name: string]: any } = {};
 
 	registry: { [resolvedKey: string]: ModuleType } = {};
 
