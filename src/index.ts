@@ -1,4 +1,4 @@
-import { globalEnv, getTags } from './platform';
+import { features, globalEnv, getTags } from './platform';
 import { Loader, LoaderConfig } from './Loader';
 
 import { JS } from './plugin/JS';
@@ -30,6 +30,12 @@ const globalSystem = globalEnv.System;
 
 export const System = new Loader({
 	cdn: 'https://cdn.jsdelivr.net/npm/',
+	globals: {
+		process: features.isNode ? globalEnv.process : {
+			'cwd': () => System.cwd,
+			'env': { 'NODE_ENV': 'production' }
+		}
+	},
 	plugins: {
 		resolve: NodeResolve,
 

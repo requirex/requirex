@@ -1,5 +1,6 @@
 import { ModuleType } from './Module';
 import { Package } from './Package';
+import { assign } from './platform';
 import { Loader } from './Loader';
 
 export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node' | 'document';
@@ -44,6 +45,10 @@ export class Record {
 		child.parentBundle = this;
 		(this.bundleChildren || (this.bundleChildren = [])).push(child);
 		return child;
+	}
+
+	addGlobals(globalTbl: { [name: string]: any }) {
+		assign(this.globalTbl, globalTbl);
 	}
 
 	resolveDep(key: string, ref: DepRef) {
