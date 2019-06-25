@@ -110,7 +110,7 @@ export class Record {
 	globalTbl: { [name: string]: any } = {};
 
 	/** Table of recursive dependencies seen, to break circular chains. */
-	deepDepTbl: { [resolvedKey: string]: Record } = {};
+	deepDepTbl: { [resolvedKey: string]: Record | undefined } = {};
 	/** Promises for translations of all recursive dependencies. */
 	deepDepList: Record[] = [];
 

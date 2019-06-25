@@ -5,7 +5,7 @@ import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin, assign } from './platform';
 import { fetch, FetchResponse, FetchOptions } from './fetch';
 
-const emptyPromise = Promise.resolve();
+const emptyPromise = Promise.resolve(void 0);
 
 export interface LoaderPlugin {
 	fetchRecord?(record: Record): Promise<void>;
@@ -98,10 +98,12 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		loader.discoverRecursive(resolvedKey, importKey, ref!, instantiate).then(
 			// Instantiate after translating all detected dependencies.
 			// TODO: Make sure this does not get executed multiple times for the same record!
-			(record: Record) => Promise.all(record.deepDepList.map(
-				(record: Record) => loader.translate(record).then(() => loader.update(record))
-			)).then(
-				() => instantiate ? loader.instantiate(record) : record
+			(record?: Record) => (record &&
+				Promise.all(record.deepDepList.map(
+					(record: Record) => loader.translate(record).then(() => loader.update(record))
+				)).then(
+					() => instantiate ? loader.instantiate(record) : record
+				)
 			)
 		)
 	);
@@ -260,26 +262,18 @@ export class Loader implements LoaderPlugin {
 			importKey,
 			record.resolvedKey,
 			ref
-		).then((resolvedDepKey: string): Promise<Record | undefined> | undefined => {
-			let result: Promise<Record> | undefined;
-			const depModule = /* instantiate && */ this.registry[resolvedDepKey];
+		).then((resolvedDepKey: string) => {
+			// Avoid blocking on previously seen dependencies,
+			// to break circular dependency chains.
+			const result = (
+				(ref.record = base.deepDepTbl[resolvedDepKey]) ||
+				this.discoverRecursive(resolvedDepKey, importKey, ref, instantiate, base)
+			);
 
-			if(depModule) {
-				// Bind already registered modules as-is.
-				ref.module = depModule;
-			} else {
-				// Bind imported name and the import record,
-				// to be registered (synchronously) when required.
-				ref.record = base.deepDepTbl[resolvedDepKey];
-
-				// Avoid blocking on previously seen dependencies,
-				// to break circular dependency chains.
-				if(!ref.record) {
-					result = this.discoverRecursive(resolvedDepKey, importKey, ref, instantiate, base);
-				}
-			}
-
+			// Bind imported name and the import record,
+			// to be registered (synchronously) when required.
 			record.resolveDep(importKey, ref);
+
 			return result;
 		}).catch((err: NodeJS.ErrnoException) => {
 			if(err && err.message) {
@@ -304,12 +298,18 @@ export class Loader implements LoaderPlugin {
 		ref: DepRef,
 		instantiate: boolean,
 		base?: Record
-	): Promise<Record> {
-		// This corresponds to code after loader.resolve in SystemJS resolveInstantiate
-		// (short path for fully resolved names is in import in our case).
-		let record = this.records[resolvedKey] || (
-			this.records[resolvedKey] = new Record(this, resolvedKey, importKey, ref.package)
-		);
+	): Promise<Record | undefined> {
+		const depModule = /* instantiate && */ this.registry[resolvedKey];
+		let record = this.records[resolvedKey];
+
+		if(depModule) {
+			// Bind already registered modules as-is.
+			ref.module = depModule;
+			if(!record) return emptyPromise;
+		} else if(!record) {
+			record = new Record(this, resolvedKey, importKey, ref.package)
+			this.records[resolvedKey] = record;
+		}
 
 		base = base || record;
 
