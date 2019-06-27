@@ -1,4 +1,4 @@
-import { getLocal, getDir } from '../URL';
+import { URL, getDir } from '../URL';
 import { Record } from '../Record';
 import { ModuleCJS } from '../Module';
 import { globalEnv, globalEval } from '../platform';
@@ -37,7 +37,7 @@ export class CJS implements LoaderPlugin {
 
 		const moduleInternal = record.moduleInternal = {
 			exports,
-			filename: getLocal(record.resolvedKey),
+			filename: URL.toLocal(record.resolvedKey),
 			id: record.resolvedKey,
 			loaded: false,
 			// TODO: Maybe populate this with guesses.
@@ -50,7 +50,7 @@ export class CJS implements LoaderPlugin {
 			'exports': moduleInternal.exports,
 			'module': moduleInternal,
 			'__filename': moduleInternal.filename,
-			'__dirname': getLocal(getDir(record.resolvedKey)),
+			'__dirname': URL.toLocal(getDir(record.resolvedKey)),
 			'global': globalEnv,
 			'GLOBAL': globalEnv
 		});

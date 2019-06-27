@@ -15,21 +15,6 @@ export function skipSlashes(key: string, start: number, count: number) {
 	return start;
 }
 
-/** Convert URL to a local path. Strip protocol and possible origin,
-  * use backslahes in file system paths on Windows. */
-
- export function getLocal(resolvedKey: string) {
-	if(resolvedKey.match(/^file:/)) {
-		return URL.toLocal(resolvedKey);
-	}
-
-	if(origin && resolvedKey.substr(0, origin.length) == origin) {
-		return resolvedKey.substr(origin.length);
-	}
-
-	return resolvedKey;
-}
-
 /** Strip query string, hash, last slash in path and anything after it
   * to get the directory part of a path or address. **/
 
@@ -160,15 +145,22 @@ export class URL {
 		return key.replace(/^\//, 'file:///');
 	}
 
+	/** Convert URL to a local path. Strip protocol and possible origin,
+	  * use backslahes in file system paths on Windows. */
+
 	static toLocal(key: string) {
-		let local = key.replace(/^file:\/\//, '');
+		if(key.match(/^file:/)) {
+			key = key.replace(/^file:\/\//, '');
+		} else if(origin && key.substr(0, origin.length) == origin) {
+			key = key.substr(origin.length);
+		}
 
 		if(features.isWin) {
 			// TODO: Convert file://server/ to \\server\
-			local = local.replace(/^\/([0-9A-Za-z]+:\/)/, '$1').replace(/\//g, '\\');
+			key = key.replace(/^\/([0-9A-Za-z]+:\/)/, '$1').replace(/\//g, '\\');
 		}
 
-		return local;
+		return key;
 	}
 
 }
