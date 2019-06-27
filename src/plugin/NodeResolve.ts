@@ -278,7 +278,7 @@ function inRegistry(loader: Loader, key: string) {
 
 /** Check if a file exists. */
 
-function checkFile(loader: Loader, key: string, importKey: string, baseKey: string, ref: DepRef) {
+function checkFile(loader: Loader, key: string, importKey: string, baseKey: string, ref?: DepRef) {
 	let baseExt: string | undefined;
 	let name: string;
 
@@ -325,6 +325,8 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 	for(let key of list) {
 		if(inRegistry(loader, key)) return key;
 	}
+
+	if(!ref) return key;
 
 	if(ref.isImport && !rePackage.test(importKey)) {
 		return loader.fetch(list[0]).then((res: FetchResponse) =>
@@ -418,7 +420,7 @@ export class NodeResolve implements LoaderPlugin {
 			ref.package = pkg;
 		}
 
-		return resolvedKey;
+		return checkFile(loader, resolvedKey, key, baseKey) as string;
 	}
 
 	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
