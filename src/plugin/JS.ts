@@ -201,7 +201,11 @@ function parseSyntax(
 
 				break;
 
-			case '"': case "'": case '`':
+			case '`':
+
+				handler(token, state);
+
+			case '"': case "'":
 
 				// Skip a string.
 				do {
@@ -491,7 +495,7 @@ export class JS implements LoaderPlugin {
 
 			if(
 				!features.isES6 &&
-				(token == 'let' || token == 'const' || token == '=>')
+				(token == '`' || token == 'let' || token == 'const' || token == '=>')
 			) {
 				state.record.format = 'ts';
 				formatKnown = true;

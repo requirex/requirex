@@ -12,7 +12,7 @@ const isNode = (
 let isES6: boolean;
 
 try {
-	isES6 = (0, eval)('(...a)=>({a}={a})')().a.length == 0;
+	isES6 = (0, eval)('(...a)=>({a}={a:`${a[0]}`})')('x').a == 'x';
 } catch(err) {
 	isES6 = false;
 }
