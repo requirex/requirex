@@ -41,11 +41,15 @@ export interface SystemDeclaration {
 
 export type SystemFactory = (exports?: any, module?: ModuleType) => SystemDeclaration;
 
+/** Serialized form of a bundled package. */
+
 export interface BuiltSpec {
 	name: string;
 	root: string;
 	main: string;
 	map: { [key: string]: string };
+	/** File names, formats and dependency names mapped to their index in the
+	  * bundle, or -1 if defined elsewhere. */
 	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
 }
 
@@ -487,7 +491,7 @@ export class Loader implements LoaderPlugin {
 
 						for(let depName of record.depList.slice(0).sort()) {
 							const dep = record.depTbl[depName].record;
-							if(dep) deps.push(str(depName) + ': ' + dep.num);
+							deps.push(str(depName) + ': ' + (dep ? dep.num : -1));
 						}
 
 						return '\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
@@ -539,7 +543,12 @@ export class Loader implements LoaderPlugin {
 
 			for(let key in deps) {
 				if(deps.hasOwnProperty(key)) {
-					record.addDep(key, { record: recordList[deps[key]] });
+					const depNum = deps[key];
+					if(depNum < 0) {
+						record.addDep(key, { module: this.registry[key] });
+					} else {
+						record.addDep(key, { record: recordList[depNum] });
+					}
 				}
 			}
 
