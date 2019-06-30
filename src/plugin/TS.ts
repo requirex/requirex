@@ -1,15 +1,15 @@
-import * as _ts from 'typescript';
+import * as Lib from 'typescript';
 
 import { Record } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
 	interface Record {
-		tsSnapshot?: _ts.IScriptSnapshot;
+		tsSnapshot?: Lib.IScriptSnapshot;
 	}
 }
 
-function createHost(loader: Loader, ts: typeof _ts): _ts.LanguageServiceHost {
+function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
 	return ({
 		getCompilationSettings: () => ({
 			jsx: ts.JsxEmit.React,
@@ -62,7 +62,14 @@ export class TS implements LoaderPlugin {
 	constructor(private loader: Loader) { }
 
 	discover(record: Record) {
-		return this.loader.import('typescript', this.loader.baseURL || this.loader.firstParent).then((ts: typeof _ts) => {
+		if(!this.lib) {
+			this.lib = this.loader.import(
+				'typescript',
+				this.loader.baseURL || this.loader.firstParent
+			);
+		}
+
+		return this.lib.then((ts: typeof Lib) => {
 			if(!this.tsService) {
 				this.tsHost = createHost(this.loader, ts);
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
@@ -100,7 +107,8 @@ export class TS implements LoaderPlugin {
 	/** Dummy instantiate for d.ts files. */
 	instantiate(record: Record) { }
 
-	tsHost: _ts.LanguageServiceHost;
-	tsService: _ts.LanguageService;
+	lib: Promise<typeof Lib>;
+	tsHost: Lib.LanguageServiceHost;
+	tsService: Lib.LanguageService;
 
 }
