@@ -49,7 +49,10 @@ export const System = new Loader({
 		'd.ts': TS,
 		CSS,
 		TXT,
+		vert: TXT,
+		frag: TXT,
 		Json,
+
 		Node,
 		Document,
 		Cache
