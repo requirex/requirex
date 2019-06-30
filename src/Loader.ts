@@ -509,7 +509,7 @@ export class Loader implements LoaderPlugin {
 				const pkg = spec.package;
 				return [
 					'name: ' + str(pkg.name),
-					'root: ' + str(pkg.root),
+					'root: ' + str(parent ? URL.relative(parent, pkg.root) : pkg.root),
 					'main: ' + str(pkg.main),
 					'map: ' + str(pkg.map),
 					'files: [\n\t\t[\n' + spec.records.map((record: Record) => {
