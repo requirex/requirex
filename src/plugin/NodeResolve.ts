@@ -365,7 +365,7 @@ export class NodeResolve implements LoaderPlugin {
 					mappedKey = pkg.map[resolvedKey];
 				}
 
-				if(mappedKey && --count) {
+				if(mappedKey && mappedKey != key && --count) {
 					key = mappedKey;
 					baseKey = pkg.root + '/';
 				} else break;
