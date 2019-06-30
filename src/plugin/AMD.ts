@@ -3,6 +3,21 @@ import { ModuleAMD } from '../Module';
 import { globalEnv, globalEval } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
+function initRecord(record: Record) {
+	const exports = {};
+
+	// TODO: Add globals.
+
+	record.moduleInternal = {
+		config: () => { },
+		exports,
+		id: record.resolvedKey,
+		uri: record.resolvedKey
+	};
+
+	return record;
+}
+
 /** AMD (asynchronous module definition) loader plugin. */
 
 export class AMD implements LoaderPlugin {
@@ -46,12 +61,16 @@ export class AMD implements LoaderPlugin {
 			key = resolvedKey;
 		}
 
-		// Add factory to latest record if the name matches or is undefined.
-		// Otherwise create a new record.
+		if(
+			key != record.importKey &&
+			(!record.pkg || key != record.pkg.name) &&
+			resolvedKey != record.resolvedKey
+		) {
+			// Add factory to latest record if the name matches or is undefined.
+			// Otherwise create a new record.
 
-		if(key != record.importKey && resolvedKey != record.resolvedKey) {
 			record = record.addBundled(loader.records[key] || (
-				loader.records[key] = new Record(loader, key)
+				loader.records[key] = initRecord(new Record(loader, key))
 			));
 		}
 
@@ -138,14 +157,7 @@ export class AMD implements LoaderPlugin {
 	})(this.loader);
 
 	discover(record: Record) {
-		const exports = {};
-
-		record.moduleInternal = {
-			config: () => { },
-			exports,
-			id: record.resolvedKey,
-			uri: record.resolvedKey
-		};
+		initRecord(record);
 
 		// TODO: Is changing global define necessary?
 		const define = globalEnv.define;
@@ -156,7 +168,7 @@ export class AMD implements LoaderPlugin {
 		});
 
 		try {
-			const compiled = globalEval(record.wrap());
+			const compiled = record.compiled || globalEval(record.wrap());
 
 			// Call imported module.
 			compiled.apply(globalEnv, record.argValues);
