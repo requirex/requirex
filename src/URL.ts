@@ -109,7 +109,6 @@ export class URL {
 			(next = a.indexOf('/', pos) + 1) &&
 			a.substr(pos, next - pos) == b.substr(pos, next - pos)
 		) {
-			// console.log(a.substr(pos, next - pos), b.substr(pos, next - pos));
 			pos = next;
 		}
 

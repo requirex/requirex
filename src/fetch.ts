@@ -189,7 +189,6 @@ export function nodeFetch(key: string, options: HTTP.RequestOptions, ttl = 3) {
 
 export function fetch(key: string, options?: FetchOptions) {
 	options = options || {};
-	console.log('FETCH', options.method, key);
 
 	return features.isNode ? nodeFetch(key, options) : new Promise(
 		(

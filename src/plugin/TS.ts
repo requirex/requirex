@@ -62,7 +62,6 @@ export class TS implements LoaderPlugin {
 	constructor(private loader: Loader) { }
 
 	discover(record: Record) {
-		// console.log('NEED TYPESCRIPT', record.resolvedKey);
 		return this.loader.import('typescript', this.loader.baseURL || this.loader.firstParent).then((ts: typeof _ts) => {
 			if(!this.tsService) {
 				this.tsHost = createHost(this.loader, ts);
