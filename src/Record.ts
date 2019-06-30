@@ -33,8 +33,13 @@ export class Record {
 	) { }
 
 	addDep(key: string, ref?: DepRef) {
-		const num = this.depList.length;
-		this.depList[num] = key;
+		let num = this.depNumTbl[key];
+
+		if(!num && num !== 0) {
+			num = this.depList.length;
+			this.depList[num] = key;
+			this.depNumTbl[key] = num;
+		}
 
 		if(ref) this.resolveDep(key, ref);
 
@@ -106,6 +111,7 @@ export class Record {
 	depNumList: number[] = [];
 	/** Map of import names to their load records or exported objects. */
 	depTbl: { [key: string]: DepRef } = {};
+	depNumTbl: { [key: string]: number } = {};
 
 	globalTbl: { [name: string]: any } = {};
 
