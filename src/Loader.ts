@@ -368,18 +368,25 @@ export class Loader implements LoaderPlugin {
 	}
 
 	discover(record: Record): Promise<void> | void {
-		const format = record.format;
-		const plugin = this.plugins[format!];
+		let format: ModuleFormat | undefined;
+		let plugin: LoaderPlugin;
+		let result: Promise<void> | void;
 
 		record.addGlobals(this.globalTbl);
 
-		if(plugin && plugin.discover) {
-			return Promise.resolve(
-				plugin.discover(record)
-			).then(() => {
-				if(record.format != format) return this.discover(record);
-			});
-		}
+		do {
+			format = record.format;
+			plugin = this.plugins[format!];
+			if(!plugin || !plugin.discover) return;
+
+			result = plugin.discover(record);
+
+			if(typeof result == 'object' && typeof result.then == 'function') {
+				return result.then(() => {
+					if(record.format != format) return this.discover(record);
+				});
+			}
+		} while(record.format != format);
 	}
 
 	translate(record: Record): Promise<void> {
@@ -574,7 +581,9 @@ export class Loader implements LoaderPlugin {
 				}
 			}
 
-			record.addGlobals(this.globalTbl);
+			if(this.discover(record)) {
+				throw(new Error('Async discover plugins are not supported in bundles'));
+			}
 
 			this.translate(record);
 		}
