@@ -194,11 +194,11 @@ export class Loader implements LoaderPlugin {
 	getPackage(key: string) {
 		let end = key.length;
 
-		while((end = key.lastIndexOf('/', end - 1)) >= 0) {
+		do {
 			const pkg = this.packageRootTbl[key.substr(0, end)];
 
 			if(pkg && pkg instanceof Package) return pkg;
-		}
+		} while((end = key.lastIndexOf('/', end - 1)) >= 0);
 	}
 
 	resolveSync(key: string, callerKey?: string, ref?: DepRef) {

@@ -286,6 +286,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 
 	let pos = key.lastIndexOf('.') + 1;
 	let ext = key.substr(pos);
+	const origKey = key;
 
 	// Add default extension if file has no known extension.
 	if(!(pos && loader.plugins[ext]) && !inRegistry(loader, key)) {
@@ -326,7 +327,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 		if(inRegistry(loader, key)) return key;
 	}
 
-	if(!ref) return key;
+	if(!ref) return origKey;
 
 	if(ref.isImport && !rePackage.test(importKey)) {
 		return loader.fetch(list[0]).then((res: FetchResponse) =>
