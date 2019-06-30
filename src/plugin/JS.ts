@@ -1,6 +1,6 @@
 import { Record, ModuleFormat } from '../Record';
-import { LoaderPlugin } from '../Loader';
-import { features } from '../platform';
+import { Loader, LoaderPlugin } from '../Loader';
+import { features, globalEval } from '../platform';
 
 const chunkSize = 128;
 
@@ -320,6 +320,8 @@ function guessFormat(token: string, state: TranslateState) {
 
 export class JS implements LoaderPlugin {
 
+	constructor(private loader: Loader) { }
+
 	/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
 	  * Optimized for speed. */
 
@@ -541,6 +543,30 @@ export class JS implements LoaderPlugin {
 		}
 
 		record.sourceCode = text;
+	}
+
+	/** Run code with no module format, for example a requirex bundle. */
+
+	instantiate(record: Record) {
+		let compiled = record.compiled;
+
+		record.setArgs(record.globalTbl, {
+			// Inject loader in evaluated scope.
+			System: this.loader
+		});
+
+		if(!compiled) {
+			try {
+				// Compile module into a function under global scope.
+				compiled = globalEval(record.wrap());
+			} catch(err) {
+				record.loadError = err;
+				throw err;
+			}
+		}
+
+		// Call imported module.
+		compiled.apply(null, record.argValues);
 	}
 
 }
