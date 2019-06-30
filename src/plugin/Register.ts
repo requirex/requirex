@@ -22,7 +22,7 @@ export class Register implements LoaderPlugin {
 		loader.latestRecord = record;
 
 		try {
-			const compiled = globalEval(record.wrap());
+			const compiled = record.compiled || globalEval(record.wrap());
 
 			// Call imported module.
 			compiled.apply(globalEnv, record.argValues);
