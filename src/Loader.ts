@@ -160,6 +160,11 @@ export class Loader implements LoaderPlugin {
 		}
 
 		assign(this.globalTbl, config.globals || {});
+		assign(this.currentConfig, config);
+	}
+
+	getConfig() {
+		return this.currentConfig;
 	}
 
 	/** @param key Name of module or file to import, may be a relative path.
@@ -566,6 +571,8 @@ export class Loader implements LoaderPlugin {
 	packageRootTbl: { [resolvedRoot: string]: Package | false | Promise<Package | false> } = {};
 	repoTbl: { [resolvedPath: string]: true } = {}
 	cdn: string;
+
+	private currentConfig: LoaderConfig = {};
 
 	/** Paths to node-modules directories containing modules under development,
 	  * to avoid aggressively caching their contents and better support
