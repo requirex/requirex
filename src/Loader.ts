@@ -53,6 +53,23 @@ export interface BuiltSpec {
 	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
 }
 
+function getAllDeps(
+	record: Record,
+	depTbl: { [key: string]: Record },
+	depList: Record[]
+) {
+	depTbl[record.resolvedKey] = record;
+	depList.push(record);
+
+	for(let name of record.depList) {
+		const dep = record.depTbl[name].record;
+
+		if(dep && !depTbl[dep.resolvedKey]) getAllDeps(dep, depTbl, depList);
+	}
+
+	return depList;
+}
+
 function handleExtension(loader: Loader, key: string, ref?: DepRef) {
 	let format = ref && ref.format;
 	let pos = key.lastIndexOf('/') + 1;
@@ -454,7 +471,7 @@ export class Loader implements LoaderPlugin {
 			const pkgTbl: { [name: string]: { package: Package, records: Record[] } } = {};
 			const pkgList: string[] = [];
 
-			for(let dep of record.deepDepList) {
+			for(let dep of getAllDeps(record, {}, [])) {
 				const pkg = dep.pkg || this.package;
 				let spec = pkgTbl[pkg.name];
 

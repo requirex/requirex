@@ -257,22 +257,8 @@ export class Cache {
 			const meta: CacheMeta = JSON.parse(storage.getItem(metaKey) || 'null');
 			if(!meta) return;
 
-			let depList: string[];
-
-			if(record.format != 'ts' && record.format != 'tsx' && record.format != 'd.ts') {
-				depList = [];
-
-				for(let key of record.depList) {
-					const dep = record.depTbl[key];
-					if(dep.format != 'd.ts') depList.push(key);
-				}
-				// console.log('UPDATE', record.resolvedKey, depList);
-			} else {
-				depList = record.depList;
-			}
-
 			meta.format = record.format;
-			meta.deps = depList;
+			meta.deps = record.depList;
 
 			// TODO: Maybe call a hook in the format plugin so it can store
 			// any additional metadata.

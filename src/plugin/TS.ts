@@ -102,6 +102,8 @@ export class TS implements LoaderPlugin {
 				record.sourceCode = info.text;
 			}
 		}
+
+		record.markDevDeps('d.ts');
 	}
 
 	/** Dummy instantiate for d.ts files. */

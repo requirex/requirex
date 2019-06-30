@@ -60,6 +60,27 @@ export class Record {
 		this.depTbl[key] = ref;
 	}
 
+	markDevDeps(format: string) {
+		let depList = this.depList;
+		this.depList = [];
+
+		for(let key of depList) {
+			const dep = this.depTbl[key];
+
+			if(dep && dep.format == format) {
+				this.devDepList.push(key);
+			} else {
+				this.depList.push(key);
+			}
+		}
+
+		depList = this.depList;
+
+		for(let num = 0; num < depList.length; ++num) {
+			this.depNumTbl[depList[num]] = num;
+		}
+	}
+
 	setArgs(...defs: { [name: string]: any }[]) {
 		const argNames = [];
 		const args: { [name: string]: any } = {};
@@ -112,6 +133,7 @@ export class Record {
 	/** Map of import names to their load records or exported objects. */
 	depTbl: { [key: string]: DepRef } = {};
 	depNumTbl: { [key: string]: number } = {};
+	devDepList: string[] = [];
 
 	globalTbl: { [name: string]: any } = {};
 
