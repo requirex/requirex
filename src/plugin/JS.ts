@@ -30,6 +30,8 @@ const reCallLiteral = /^\s*\(\s*["'`\[{_$A-Za-z]/;
 // TODO: What types are valid for the first argument to System.register?
 const reRegister = /^\s*\.\s*register\s*\(\s*["'`\[]/;
 
+const reBuilt = /^\s*\.\s*built\s*\(\s*1\s*,/;
+
 /** Match a function call with a string argument.
   * Backslashes and dollar signs are prohibited to avoid arbitrary expressions
   * in template literals and escaped string delimiters. */
@@ -294,7 +296,6 @@ function guessFormat(token: string, state: TranslateState) {
 		// Get some input immediately before and after the token,
 		// for quickly testing regexp matches.
 		const chunkAfter = text.substr(state.pos!, chunkSize);
-		const chunkBefore = text.substr(last - len, len);
 
 		if(format[3] && format[3]!.test(text.substr(last - len, len))) {
 			// Redefining the module syntax makes known usage patterns unlikely.
@@ -366,7 +367,9 @@ export class JS implements LoaderPlugin {
 			/** Inside a conditionally compiled block to be left in place. */
 			ALIVE_BLOCK,
 			/** Inside a conditionally compiled block to eliminate. */
-			DEAD_BLOCK
+			DEAD_BLOCK,
+			/** Inside a bundle, to be ignored in parsing. */
+			BUILT
 		}
 
 		let mode = ConditionMode.NONE;
@@ -387,6 +390,12 @@ export class JS implements LoaderPlugin {
 			// (which is still unsupported, would need a state stack here).
 
 			if(before == '.') return;
+
+			if(token == 'System' && state.captureDepth! < 0 && reBuilt.test(text.substr(state.pos!, chunkSize))) {
+				// Avoid re-processing bundled code.
+				mode = ConditionMode.BUILT;
+				state.captureDepth = state.depth + 1;
+			}
 
 			if(token == 'if' && state.captureDepth! < 0) {
 				conditionStart = state.last!;
@@ -493,7 +502,7 @@ export class JS implements LoaderPlugin {
 			}
 
 			// Disregard eliminated code in module format and dependency detection.
-			if(mode == ConditionMode.DEAD_BLOCK) return;
+			if(mode == ConditionMode.DEAD_BLOCK || mode == ConditionMode.BUILT) return;
 
 			if(
 				!features.isES6 &&
