@@ -18,11 +18,13 @@ import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
 
 export { LoaderConfig };
-export { URL, fetch, FetchResponse, Loader };
+export { features, URL, fetch, FetchResponse, Loader };
 
 const internals = {
-	URL, fetch, FetchResponse, Loader
+	features, URL, fetch, FetchResponse, Loader
 };
+
+features.fetch = fetch;
 
 /** This module, importable from code running inside. */
 const requirex = internals as typeof internals & { System: Loader };

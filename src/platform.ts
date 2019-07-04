@@ -1,5 +1,7 @@
 import * as VM from 'vm';
 
+import { FetchOptions, FetchResponse } from './fetch';
+
 declare const process: any;
 
 export const unsupported = 'Unsupported function ';
@@ -19,6 +21,9 @@ try {
 }
 
 export const features = {
+	fetch: (key: string, options?: FetchOptions): Promise<FetchResponse> => {
+		throw(new Error(unsupported + 'fetch'));
+	},
 	isES6,
 	isNode,
 	isWin: (

@@ -1,4 +1,4 @@
-import { fetch, FetchOptions, FetchHeaders, FetchResponse } from '../fetch';
+import { FetchOptions, FetchHeaders, FetchResponse } from '../fetch';
 import { Record, ModuleFormat } from '../Record';
 import { skipSlashes } from '../URL';
 import { Loader } from '../Loader';
@@ -103,7 +103,7 @@ export class Cache {
 			bust && (resolvedKey.indexOf('?') >= 0 ? '&' : '?') + bust
 		);
 
-		return fetch(key, options).then((res: FetchResponse) => {
+		return features.fetch(key, options).then((res: FetchResponse) => {
 			if(bust) {
 				const old = res;
 

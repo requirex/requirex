@@ -3,7 +3,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin, assign } from './platform';
-import { fetch, FetchResponse, FetchOptions } from './fetch';
+import { FetchResponse, FetchOptions } from './fetch';
 
 const emptyPromise = Promise.resolve(void 0);
 
@@ -243,7 +243,7 @@ export class Loader implements LoaderPlugin {
 		const plugin = this.plugins['cache'];
 
 		return (
-			(plugin && plugin.fetch ? plugin.fetch : fetch).call(
+			(plugin && plugin.fetch ? plugin.fetch : features.fetch).call(
 				plugin,
 				url,
 				options
