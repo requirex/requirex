@@ -2,6 +2,7 @@ import * as VM from 'vm';
 
 declare const process: any;
 
+export const unsupported = 'Unsupported function ';
 export const globalEnv: { [name: string]: any } = typeof self == 'object' ? self : global;
 
 const isNode = (

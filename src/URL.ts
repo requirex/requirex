@@ -1,10 +1,65 @@
 import { features, origin } from './platform';
 
+ /** Symbolic names for reUrlSimple match array members. */
+ const enum UrlSimple {
+	HREF = 0,
+	PROTO,
+	MAIN,
+	QUERY,
+	HASH
+}
+
+/** Symbolic names for reUrlFull match array members. */
+const enum UrlFull {
+	HREF = 0,
+	PROTO,
+	SLASHES,
+	AUTH,
+	HOSTNAME,
+	PORT,
+	PATH,
+	QUERY,
+	HASH
+}
+
+// PROTO.
+const reProto = '^([0-9A-Za-z]+:)?';
+
+/** Match a host, for use in reUrlFull. */
+const reHost = (
+	// SLASHES including host.
+	'(' + (
+		'//' +
+		// AUTH.
+		'([^@/?#]*@)?' +
+		// HOSTNAME.
+		'([^:/?#]*)' +
+		// PORT or empty string.
+		':?([0-9]*)'
+	) + ')?'
+);
+
+const rePath = (
+	// PATH (or MAIN if reHost is absent).
+	'([^?#]*)' +
+	// QUERY including ? or empty string.
+	'(\\??[^#]*)' +
+	// HASH including # or empty string.
+	'(#?.*)$'
+);
+
 /** Match any string and split by the first : ? # chars.
   * Split by : only if a valid protocol name precedes it.
   * Most groups match an empty string to avoid testing for undefined later. */
-const reUrl = /^([0-9A-Za-z]+:)?([^?#]*)(\??[^#]*)(#?.*)$/;
+const reUrlSimple = new RegExp(reProto + rePath);
 
+/** Split a URL into parts relevant to url.parse(). */
+const reUrlFull = new RegExp(reProto + reHost + rePath);
+
+/** Match everything after the last directory component. */
+const reFile = /(\/[^/?#]*)?([?#].*)?$/;
+
+/** Prototypes known to include a path component, to be added if missing. */
 const knownProto: { [proto: string]: 1 } = { 'file:': 1, 'http:': 1, 'https:': 1 };
 
 /** Skip given number of slashes in a path starting from a given offset. */
@@ -19,29 +74,75 @@ export function skipSlashes(key: string, start: number, count: number) {
   * to get the directory part of a path or address. **/
 
 export function getDir(key: string) {
-	return key.replace(/(\/[^/#?]*)?([#?].*)?$/, '');
+	return key.replace(reFile, '');
 }
 
 export class URL {
+
+	static parse(key: string) {
+		const parts = key.match(reUrlFull)!;
+
+		// All fields are coerced to (possibly empty) strings.
+		let _: string | null = '';
+
+		let auth = parts[UrlFull.AUTH] || _;
+		auth = auth.substr(0, auth.length - 1);
+
+		const protocol = parts[UrlFull.PROTO] || _;
+		const slashes = parts[UrlFull.SLASHES] || _;
+		const hostname = parts[UrlFull.HOSTNAME] || _;
+		const port = parts[UrlFull.PORT] || _;
+		const host = hostname + (port && ':') + port;
+		const pathname = parts[UrlFull.PATH] || (host && '/');
+		const search = parts[UrlFull.QUERY];
+		const path = pathname + search;
+		const query = search.substr(1);
+		const hash = parts[UrlFull.HASH];
+
+		const href = protocol + (slashes && '//') + auth + (auth && '@') + host + path + hash;
+
+		// Replace empty strings with null in all result fields except href.
+		_ = null;
+
+		return {
+			protocol: protocol || _,
+			slashes: !!slashes || _,
+			auth: auth || _,
+			host: host || _,
+			port: port || _,
+			hostname: hostname || _,
+			hash: hash || _,
+			search: search || _,
+			query: query || _,
+			pathname: pathname || _,
+			path: path || _,
+			href
+		};
+	}
 
 	/** Resolve a relative address. */
 
 	static resolve(base: string, key: string) {
 		// Parse base and relative addresses.
-		const baseParts = base.match(reUrl)!;
-		const keyParts = key.match(reUrl)!;
+		const baseParts = base.match(reUrlSimple)!;
+		const keyParts = key.match(reUrlSimple)!;
 
 		// Extract protocol, preferentially from the relative address.
-		let proto = keyParts[1] || baseParts[1] || '';
-		base = baseParts[2];
-		key = keyParts[2];
+		let proto = keyParts[UrlSimple.PROTO] || baseParts[UrlSimple.PROTO] || '';
+		base = baseParts[UrlSimple.MAIN];
+		key = keyParts[UrlSimple.MAIN];
 
 		if(!key) {
 			// Key with no server / path only replaces the query string and/or hash.
-			return proto + baseParts[2] + (keyParts[3] || baseParts[3]) + keyParts[4];
+			return (
+				proto +
+				baseParts[UrlSimple.MAIN] +
+				(keyParts[UrlSimple.QUERY] || baseParts[UrlSimple.QUERY]) +
+				keyParts[UrlSimple.HASH]
+			);
 		}
 
-		const suffix = keyParts[3] + keyParts[4];
+		const suffix = keyParts[UrlSimple.QUERY] + keyParts[UrlSimple.HASH];
 		const hasServer = base.substr(0, 2) == '//';
 		let pos = 0;
 
@@ -60,10 +161,14 @@ export class URL {
 				if(root) base = base.substr(0, root);
 				pos = 1;
 			}
-		} else if(keyParts[1] && !knownProto[keyParts[1]] && key.charAt(0) != '.') {
+		} else if(
+			keyParts[UrlSimple.PROTO] &&
+			!knownProto[keyParts[UrlSimple.PROTO]] &&
+			key.charAt(0) != '.'
+		) {
 			// Weird protocols followed by neither explicitly absolute nor
 			// relative paths are used as-is, ignoring the base path.
-			return keyParts[1] + key + suffix;
+			return keyParts[UrlSimple.PROTO] + key + suffix;
 		}
 
 		let slash = base.lastIndexOf('/') + 1;

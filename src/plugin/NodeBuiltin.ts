@@ -1,7 +1,9 @@
 import { URL } from '../URL';
 import { Record } from '../Record';
-import { features, nodeRequire } from '../platform';
+import { unsupported, features, nodeRequire, assign } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
+
+type NodeCB<Type> = (err: NodeJS.ErrnoException | null, res?: Type) => void;
 
 const emptyPromise = Promise.resolve();
 
@@ -9,10 +11,23 @@ const emptyPromise = Promise.resolve();
 
 export class Node implements LoaderPlugin {
 
-	constructor(private loader: Loader) { }
+	constructor(private loader: Loader) {
+		const fs = {
+			existsSync: (key: string) => false,
+			readFile: (key: string, options: any, cb: NodeCB<any>) => {
+				if(typeof options == 'function') cb = options;
+				cb(new Error(unsupported + 'fs.readFile'));
+			},
+			stat: (key: string, cb: NodeCB<any>) => {
+				cb(new Error(unsupported + 'fs.stat'));
+			}
+		};
 
-	nodeShims = ((loader: Loader) => ({
-		path: {
+		const os = {
+			homedir: () => '/'
+		};
+
+		const path = {
 			dirname: (key: string) => {
 				let prefix = '';
 
@@ -38,10 +53,11 @@ export class Node implements LoaderPlugin {
 				key.charAt(0) == '/' ||
 				(features.isWin && key.match(/^[A-Za-z]+:\//))
 			),
+			join: (...paths: string[]) => paths.join('/').replace(/\/\/+/g, '/'),
 			relative: (base: string, key: string) => {
 				return URL.relative(
-					URL.resolve(loader.cwd, base),
-					URL.resolve(loader.cwd, key)
+					URL.resolve('/', URL.fromLocal(base)),
+					URL.resolve('/', URL.fromLocal(key))
 				);
 			},
 			resolve: (...args: string[]) => {
@@ -54,12 +70,37 @@ export class Node implements LoaderPlugin {
 				return result;
 			},
 			sep: '/'
-		},
-		util: {
-			// TODO
-			// inherits: () => { }
-		}
-	} as { [name: string]: any }))(this.loader);
+		};
+
+		const stream = () => {};
+
+		assign(stream, {
+			Stream: stream
+		});
+
+		const url = URL;
+
+		const util = {
+			inherits: (Class: any, Base: any) => {
+				function Type(this: any) {
+					this.constructor = Class;
+				}
+
+				Type.prototype = Base.prototype;
+				Class.prototype = new (Type as any)();
+			},
+			deprecate: (func: Function, msg: string) => {
+				return function(this: any) {
+					console.log('Deprecated: ' + msg);
+					return func.apply(this, arguments);
+				}
+			}
+		};
+
+		this.nodeShims = { fs, os, path, stream, url, util };
+	}
+
+	nodeShims: { [name: string]: any };
 
 	resolve(key: string) {
 		return key;

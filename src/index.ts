@@ -32,8 +32,9 @@ export const System = new Loader({
 	cdn: 'https://cdn.jsdelivr.net/npm/',
 	globals: {
 		process: features.isNode ? globalEnv.process : {
-			'cwd': () => System.cwd,
-			'env': { 'NODE_ENV': 'production' }
+			argv: [ '/bin/node' ],
+			cwd: () => System.cwd,
+			env: { 'NODE_ENV': 'production' }
 		}
 	},
 	plugins: {
