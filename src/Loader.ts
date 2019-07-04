@@ -31,6 +31,9 @@ export interface LoaderConfig {
 	globals?: { [name: string]: any };
 	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
 	registry?: { [name: string]: any };
+
+	postCSS?: boolean;
+	minifyCSS?: boolean;
 }
 
 export interface SystemDeclaration {

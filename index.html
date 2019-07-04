@@ -7,7 +7,19 @@
 <script src="dist/umd/index.js"></script>
 <script>
 
-System.import('./example/browser/App.tsx');
+System.config({
+	postCSS: true,
+	minifyCSS: true
+});
 
 </script>
-</head><body></body></html>
+
+<script type="x-req-application/javascript" src="example/browser/App.tsx"></script>
+<script type="x-req-application/javascript">
+	import { URL } from 'requirex';
+	console.log(URL);
+</script>
+
+</head><body>
+
+</body></html>
