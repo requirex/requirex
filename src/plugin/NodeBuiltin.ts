@@ -54,6 +54,7 @@ export class Node implements LoaderPlugin {
 				(features.isWin && key.match(/^[A-Za-z]+:\//))
 			),
 			join: (...paths: string[]) => paths.join('/').replace(/\/\/+/g, '/'),
+			normalize: (key: string) => URL.resolve('.', key),
 			relative: (base: string, key: string) => {
 				return URL.relative(
 					URL.resolve('/', URL.fromLocal(base)),
