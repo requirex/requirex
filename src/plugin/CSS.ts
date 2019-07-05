@@ -4,6 +4,18 @@ import { Loader, LoaderPlugin } from '../Loader';
 import { getTags } from '../platform';
 import * as Lib from 'requirex-postcss-bundle';
 
+const nonce = '/' + Math.random() + '/';
+const reNonce = new RegExp('^(file://)?' + nonce);
+const slashes = '_SLASHES_';
+
+function wrap(key: string) {
+	return (nonce + key).replace('://', slashes);
+}
+
+function unwrap(key: string) {
+	return key.replace(reNonce, '').replace(slashes, '://');
+}
+
 /** CSS loader plugin. */
 
 export class CSS implements LoaderPlugin {
@@ -27,32 +39,36 @@ export class CSS implements LoaderPlugin {
 			).then(
 				() => loader.import(bundleName + '/src/index.ts')
 			).then((lib: typeof Lib) => new lib.PostBuilder({
-				importResolve: (key: string, dir: string) => {
-					// TODO: Resolve http URLs?
-					dir = dir.replace(/\/?$/, '/');
-					console.log('CSS RESOLVE', key, dir, URL.resolve(dir, key));
+				importResolve: (importKey: string, baseKey: string) => {
+					baseKey = unwrap(baseKey).replace(/\/?$/, '/');
 
-					// NOTE: Promise wrapper is just for testing that returning promises works.
-					return(Promise.resolve(URL.resolve(dir, key)));
+					if(importKey.charAt(0) != '~') {
+						return wrap(URL.resolve(baseKey, importKey));
+					}
+
+					// TODO: Parse package.json "style" field!
+					// Otherwise default to index.css if "main" is not a .css file.
+
+					return loader.resolve(importKey.substr(1), baseKey).then(
+						(resolvedKey) => wrap(resolvedKey)
+					);
 				},
 				importLoad: (key: string) => {
 					const resolvedKey = URL.resolve(
 						loader.baseURL || loader.firstParent!,
-						key
+						unwrap(key)
 					);
-
-					console.log('CSS LOAD', key, resolvedKey);
-					// TODO: Use System.import?
-					// TODO: Load http URLs?
 
 					return loader.fetch(resolvedKey).then(
 						(res) => res.ok ? res.text() : Promise.reject(res)
 					);
 				},
-				urlResolve: (key: string, isLocal: boolean) => URL.relative(
-					loader.baseURL || loader.firstParent!,
-					isLocal ? URL.fromLocal(key) : key
-				),
+				urlResolve: (importKey: string, baseKey: string) => {
+					return URL.relative(
+						loader.baseURL || loader.firstParent!,
+						URL.resolve(unwrap(baseKey), importKey)
+					)
+				},
 				minify: config.minifyCSS
 			}));
 		}
@@ -60,10 +76,9 @@ export class CSS implements LoaderPlugin {
 		if(!this.builder) return;
 
 		return this.builder.then((builder: Lib.PostBuilder) => {
-			console.log(builder);
 			return builder.build(
-				URL.toLocal(record.resolvedKey),
-				URL.toLocal(loader.baseURL || loader.firstParent!)
+				record.sourceCode,
+				wrap(record.resolvedKey)
 			);
 		}).then((code: string) => {
 			record.sourceCode = code;
@@ -73,21 +88,27 @@ export class CSS implements LoaderPlugin {
 	}
 
 	instantiate(record: Record) {
-if(record.sourceCode) {
-	console.log(record.sourceCode);
-}
-
 		if(!getTags) return;
+
+		let element: HTMLStyleElement | HTMLLinkElement;
 		const head = getTags('head')[0];
 
-		// Inject as a style element if transpiled.
-		// Relative URLs must be fixed by the transpiler.
-		// const element = document.createElement('style');
-		const element = document.createElement('link');
+		if(record.sourceCode) {
+			// Inject as a style element if transpiled.
+			// Relative URLs must be fixed by the transpiler.
+			console.log(record.sourceCode);
+
+			const style = document.createElement('style');
+			style.innerHTML = record.sourceCode;
+			element = style;
+		} else {
+			const link = document.createElement('link');
+			link.rel = 'stylesheet';
+			link.href = record.resolvedKey;
+			element = link;
+		}
+
 		element.type = 'text/css';
-		// element.innerHTML = record.sourceCode;
-		element.rel = 'stylesheet';
-		element.href = record.resolvedKey;
 
 		head.appendChild(element);
 	}
