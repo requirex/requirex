@@ -2,7 +2,7 @@ import { URL, skipSlashes, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { FetchResponse } from '../fetch';
-import { Loader, LoaderPlugin } from '../Loader';
+import { Loader, LoaderPlugin, RepoKind } from '../Loader';
 import { features } from '../platform';
 
 const nodeModules = '/node_modules/';
@@ -29,6 +29,30 @@ for(let key of 'assert buffer crypto events fs http https module net os path str
 	isInternal[key] = true;
 }
 
+function semverMax(first: string | undefined, rest: string[], num = 0): string {
+	if(!first) return semverMax(rest[0], rest, 1);
+
+	let result = first.split('.');
+
+	while(num < rest.length) {
+		const other = rest[num++].split('.');
+		const partCount = Math.min(result.length, other.length);
+		let partNum = 0;
+
+		while(partNum < partCount) {
+			const part = result[partNum].replace(/^[ <=>~^]+ */, '');
+			const otherPart = other[partNum++].replace(/^[ <=>~^]+ */, '');
+
+			if(otherPart > part) result = other;
+			if(otherPart < part) break;
+		}
+
+		if(partNum >= partCount && other.length > partCount) result = other;
+	}
+
+	return(result.join('.'));
+}
+
 function getRootConfigPaths(baseKey: string) {
 	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules), 3);
 
@@ -49,15 +73,19 @@ function getRootConfigPaths(baseKey: string) {
 export function getRepoPaths(loader: Loader, basePkgName: string | false, baseKey: string) {
 	let start = skipSlashes(baseKey, 0, 3);
 
-	const resultPreferred: { preferred?: boolean, root: string }[] = [];
-	const resultOther: { preferred?: boolean, root: string }[] = [];
+	const resultPreferred: { isPreferred?: boolean, root: string, isCDN?: boolean }[] = [];
+	const resultOther: { isPreferred?: boolean, root: string, isCDN?: boolean }[] = [];
 	let next = baseKey.lastIndexOf('/');
 	let end: number;
 
 	function addRepo(len: number, suffix: string) {
 		const root = baseKey.substr(0, len) + suffix;
-		const preferred = loader.repoTbl[root];
-		(preferred ? resultPreferred : resultOther).push({ preferred, root });
+		const kind = loader.repoTbl[root];
+		(kind ? resultPreferred : resultOther).push({
+			isPreferred: !!kind,
+			root,
+			isCDN: (kind == RepoKind.CDN)
+		});
 	}
 
 	// List parent directories from caller path while it contains
@@ -79,17 +107,24 @@ export function getRepoPaths(loader: Loader, basePkgName: string | false, baseKe
 		if(chunk != nodeModules) addRepo(end, nodeModules);
 	} while(end > start);
 
-	resultOther.push({ preferred: true, root: loader.cdn });
+	resultOther.push({ isPreferred: true, root: loader.cdn, isCDN: true });
 
 	return resultPreferred.concat(resultOther);
 }
 
-function parsePackage(rootKey: string, data: string, name?: string) {
+function parsePackage(loader: Loader, rootKey: string, data: string, name?: string) {
 	const json = JSON.parse(data);
-	const pkg = new Package(name || json.name, rootKey);
+	name = name || json.name;
+	if(!name) throw(new Error('Nameless package ' + rootKey));
 
+	const pkg = new Package(name, rootKey);
 	pkg.version = json.version;
 	pkg.main = json.main || 'index.js';
+
+	const meta = loader.packageMetaTbl[name] || (loader.packageMetaTbl[name] = {});
+	// TODO: Put lockedVersion instead of suggestedVersion in rootKey and others.
+	meta.lockedVersion = pkg.version;
+
 	const browser = !features.isNode && json.browser;
 
 	// TODO: Handle dependency versions and the browser field.
@@ -116,12 +151,19 @@ function parsePackage(rootKey: string, data: string, name?: string) {
 		}
 	}
 
+	for(let dep of Object.keys(json.dependencies || {})) {
+		const depMeta = loader.packageMetaTbl[dep] || (loader.packageMetaTbl[dep] = {});
+		const versionList = json.dependencies[dep].split(/ *\|\| *| +(- +)?/);
+
+		depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
+	}
+
 	return pkg;
 }
 
 function ifExists(loader: Loader, key: string) {
 	// TODO: Fail for wrong MIME type (mainly html error messages).
-	return loader.fetch(key, { method: 'HEAD' }).then((res) => res.url);
+	return loader.fetch(key, { method: 'HEAD' }).then((res) => decodeURI(res.url));
 }
 
 function ifExistsList(loader: Loader, list: string[], pos: number): Promise<string> {
@@ -140,10 +182,10 @@ function parseFetchedPackage(
 	let redirKey: string;
 
 	const parsed = fetched.then((res: FetchResponse) => {
-		redirKey = getDir(res.url);
+		redirKey = decodeURI(getDir(res.url));
 		return res.text();
 	}).then((data: string) => {
-		const pkg = parsePackage(redirKey, data, name)
+		const pkg = parsePackage(loader, redirKey, data, name)
 		loader.packageConfTbl[rootKey] = pkg;
 		loader.packageConfTbl[redirKey] = pkg;
 		loader.packageRootTbl[rootKey] = pkg;
@@ -160,29 +202,33 @@ function parseFetchedPackage(
 
 function fetchPackage(
 	loader: Loader,
-	repoList: { preferred?: boolean, root?: string }[],
+	repoList: { isPreferred?: boolean, root?: string, isCDN?: boolean }[],
 	name: string,
 	repoNum = 0
 ): Promise<Package | false> {
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
+	const meta = loader.packageMetaTbl[name] || {};
 
-	let parsed = loader.packageConfTbl[repoKey + name];
+	let version = (repo.isCDN && (meta.lockedVersion || meta.suggestedVersion)) || '';
+	version = (version && '@') + version;
+
+	let parsed = loader.packageConfTbl[repoKey + name + version];
 
 	if(parsed === false) {
 		parsed = Promise.reject(parsed);
 	} else if(!parsed) {
-		const jsonKey = repoKey + name + '/package.json';
-		const fetched = repo.preferred ? loader.fetch(jsonKey) : (
+		const jsonKey = repoKey + name + version + '/package.json';
+		const fetched = repo.isPreferred ? loader.fetch(jsonKey) : (
 			ifExists(loader, jsonKey).then((key: string) => {
 				// A repository was found so look for additional packages there
 				// before other addresses.
-				if(repoKey) loader.repoTbl[repoKey] = true;
+				if(repoKey) loader.repoTbl[repoKey] = repo.isCDN ? RepoKind.CDN : RepoKind.NORMAL;
 				return loader.fetch(key);
 			})
 		);
 
-		parsed = parseFetchedPackage(loader, repoKey + name, fetched, name);
+		parsed = parseFetchedPackage(loader, repoKey + name + version, fetched, name);
 	}
 
 	return Promise.resolve<Package | false>(parsed).catch(
@@ -213,6 +259,9 @@ function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string 
 	loader.packageRootTbl[key] = result;
 	return result;
 }
+
+/** Get information about package containing the given address.
+  * Try to find package.json files in parent paths. */
 
 function fetchContainingPackage(loader: Loader, baseKey: string) {
 	const packageRootTbl = loader.packageRootTbl;
@@ -333,7 +382,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 		return loader.fetch(list[0]).then((res: FetchResponse) =>
 			res.text().then((text: string) => {
 				ref.sourceCode = text;
-				return res.url;
+				return decodeURI(res.url);
 			})
 		).catch(() => ifExistsList(loader, list, 1));
 	}

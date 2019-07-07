@@ -39,7 +39,7 @@ export class Cache {
 
 	store(resolvedKey: string, res?: FetchResponse, isHead?: boolean) {
 		const storage = this.storage;
-		const finalKey = (res && res.url) || resolvedKey;
+		const finalKey = (res && decodeURI(res.url)) || resolvedKey;
 
 		if(storage) {
 			if(!this.metaTbl[resolvedKey] || !this.metaTbl[finalKey]) {
@@ -224,7 +224,7 @@ export class Cache {
 			fetched = Promise.resolve(record.sourceCode);
 		} else {
 			fetched = this.loader.fetch(record.resolvedKey).then((res: FetchResponse) => {
-				if(res.url) record.resolvedKey = res.url;
+				if(res.url) record.resolvedKey = decodeURI(res.url);
 				return res.text();
 			});
 		}
