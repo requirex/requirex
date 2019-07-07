@@ -182,7 +182,7 @@ function inRegistry(loader: Loader, key: string) {
 
 /** Check if a file exists. */
 
-function checkFile(loader: Loader, key: string, importKey: string, baseKey: string, ref?: DepRef) {
+function checkFile(loader: Loader, key: string, baseKey: string, ref?: DepRef, isPackage?: boolean) {
 	let baseExt: string | undefined;
 	let name: string;
 
@@ -233,7 +233,7 @@ function checkFile(loader: Loader, key: string, importKey: string, baseKey: stri
 
 	if(!ref) return origKey;
 
-	if(ref.isImport && !rePackage.test(importKey)) {
+	if(ref.isImport && (!isPackage || ref.package)) {
 		return loader.fetch(list[0]).then((res: FetchResponse) =>
 			res.text().then((text: string) => {
 				ref.sourceCode = text;
@@ -322,11 +322,9 @@ export class NodeResolve implements LoaderPlugin {
 			throw new Error('Too many redirections while resolving ' + key);
 		}
 
-		if(ref) {
-			ref.package = pkg;
-		}
+		if(ref) ref.package = pkg;
 
-		return checkFile(loader, resolvedKey, key, baseKey) as string;
+		return checkFile(loader, resolvedKey, baseKey) as string;
 	}
 
 	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
@@ -370,7 +368,7 @@ export class NodeResolve implements LoaderPlugin {
 			if(pkg) resolvedKey = loader.resolveSync(key, baseKey, ref);
 			if(ref.sourceCode) return resolvedKey;
 
-			return checkFile(loader, resolvedKey, key, baseKey, ref);
+			return checkFile(loader, resolvedKey, baseKey, ref, rePackage.test(key));
 		}).catch((err: any) => {
 			if(packageName) return Promise.reject(err);
 
@@ -384,7 +382,7 @@ export class NodeResolve implements LoaderPlugin {
 				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
 
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
-				return checkFile(loader, resolvedKey, key, baseKey, ref);
+				return checkFile(loader, resolvedKey, baseKey, ref);
 			});
 		});
 
