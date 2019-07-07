@@ -57,10 +57,14 @@ function fetchPackage(
 	const manager = loader.manager;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
-	const meta = manager.packageMetaTbl[name] || {};
+	const meta = manager.packageMetaTbl[name] || (manager.packageMetaTbl[name] = {});
+	let version = '';
 
-	let version = (repo.isCDN && (meta.lockedVersion || meta.suggestedVersion)) || '';
-	version = (version && '@') + version;
+	if(repo.isCDN) {
+		version = meta.suggestedVersion || 'latest';
+		meta.suggestedVersion = version;
+		version = '@' + (meta.lockedVersion || version);
+	}
 
 	let parsed = manager.packageConfTbl[repoKey + name + version];
 
@@ -363,16 +367,14 @@ export class NodeResolve implements LoaderPlugin {
 				if(plugin.resolveSync) return plugin.resolveSync(key, baseKey, ref);
 			}
 
-			if(pkg) {
-				manager.packageNameTbl[packageName!] = pkg;
-				resolvedKey = loader.resolveSync(key, baseKey, ref);
-			}
-
+			if(pkg) resolvedKey = loader.resolveSync(key, baseKey, ref);
 			if(ref.sourceCode) return resolvedKey;
 
 			return checkFile(loader, resolvedKey, key, baseKey, ref);
 		}).catch((err: any) => {
 			if(packageName) return Promise.reject(err);
+
+			// Handle importing a package using its root path.
 
 			return fetchPackage(
 				loader,
