@@ -110,17 +110,20 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	name = name || json.name;
 	if(!name) throw(new Error('Nameless package ' + rootKey));
 
-	const pkg = new Package(name, rootKey);
-	pkg.version = json.version;
-	pkg.main = json.main || 'index.js';
+	const version = json.version;
 
 	const meta = manager.packageMetaTbl[name] || (manager.packageMetaTbl[name] = {});
-	// TODO: Put lockedVersion instead of suggestedVersion in rootKey and others.
-	meta.lockedVersion = pkg.version;
+	meta.lockedVersion = version;
+
+	if(meta.suggestedVersion) {
+		rootKey = rootKey.replace('@' + meta.suggestedVersion, '@' + version);
+	}
+
+	const pkg = new Package(name, rootKey);
+	pkg.version = version;
+	pkg.main = json.main || 'index.js';
 
 	const browser = !features.isNode && json.browser;
-
-	// TODO: Handle dependency versions and the browser field.
 
 	if(typeof browser == 'string') {
 		// Use browser entry point.
