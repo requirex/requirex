@@ -6,6 +6,7 @@ import { AMD } from './plugin/AMD';
 import { CJS } from './plugin/CJS';
 import { Register } from './plugin/Register';
 import { TS } from './plugin/TS';
+import { PostCSS } from './plugin/PostCSS';
 import { CSS } from './plugin/CSS';
 import { TXT } from './plugin/TXT';
 import { Json } from './plugin/Json';
@@ -50,7 +51,8 @@ export const System = new Loader({
 		TS,
 		tsx: TS,
 		'd.ts': TS,
-		CSS,
+		css: PostCSS,
+		cssraw: CSS,
 		TXT,
 		vert: TXT,
 		frag: TXT,
