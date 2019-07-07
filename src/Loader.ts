@@ -56,6 +56,16 @@ export interface BuiltSpec {
 	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
 }
 
+export interface PackageMeta {
+	lockedVersion?: string;
+	suggestedVersion?: string;
+}
+
+export const enum RepoKind {
+	NORMAL = 1,
+	CDN = 2
+}
+
 function getAllDeps(
 	record: Record,
 	depTbl: { [key: string]: Record },
@@ -158,7 +168,7 @@ export class Loader implements LoaderPlugin {
 	config(config: LoaderConfig) {
 		if(config.baseURL) this.baseURL = config.baseURL;
 		if(config.cdn) {
-			this.repoTbl[config.cdn] = true;
+			this.repoTbl[config.cdn] = RepoKind.CDN;
 			this.cdn = config.cdn;
 		}
 
@@ -593,6 +603,10 @@ export class Loader implements LoaderPlugin {
 	}
 
 	package = new Package('_', '');
+
+	/** Map package name to configuration metadata. */
+	packageMetaTbl: { [name: string]: PackageMeta } = {};
+
 	packageNameTbl: { [name: string]: Package | false | Promise<Package | false> } = {};
 	packageConfTbl: { [resolvedRoot: string]: Package | false | Promise<Package | false> } = {};
 	/** Map resolved keys to containing packages (keys not corresponding to a package root
