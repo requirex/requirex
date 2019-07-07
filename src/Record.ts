@@ -3,7 +3,7 @@ import { Package } from './Package';
 import { assign } from './platform';
 import { Loader } from './Loader';
 
-export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node' | 'document';
+export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node' | 'document' | 'css' | 'cssraw';
 
 export type ModuleFactory = (...args: any[]) => any;
 
