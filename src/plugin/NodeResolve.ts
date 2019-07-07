@@ -1,164 +1,15 @@
-import { URL, skipSlashes, getDir } from '../URL';
+import { URL, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
+import { PackageManager, RepoKind } from '../PackageManager';
+import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage } from '../PackageManagerNode';
 import { FetchResponse } from '../fetch';
-import { Loader, LoaderPlugin, RepoKind } from '../Loader';
-import { features } from '../platform';
-
-const nodeModules = '/node_modules/';
-
-// Valid npm package name.
-const reName = '[0-9a-z][-_.0-9a-z]*';
-const rePackage = new RegExp(
-	// Package name with possible scope.
-	'^(' + (
-		// Package scope.
-		'(@' + reName + '\/)?' +
-		// Package name.
-		reName
-	) + ')' +
-	// Path inside package.
-	'(\/.*)?$'
-);
-
-const reVersion = /^(@[.0-9]+)?\/$/;
+import { Loader, LoaderPlugin } from '../Loader';
 
 const isInternal: { [key: string]: boolean } = {};
 
 for(let key of 'assert buffer crypto events fs http https module net os path stream url util vm zlib'.split(' ')) {
 	isInternal[key] = true;
-}
-
-function semverMax(first: string | undefined, rest: string[], num = 0): string {
-	if(!first) return semverMax(rest[0], rest, 1);
-
-	let result = first.split('.');
-
-	while(num < rest.length) {
-		const other = rest[num++].split('.');
-		const partCount = Math.min(result.length, other.length);
-		let partNum = 0;
-
-		while(partNum < partCount) {
-			const part = result[partNum].replace(/^[ <=>~^]+ */, '');
-			const otherPart = other[partNum++].replace(/^[ <=>~^]+ */, '');
-
-			if(otherPart > part) result = other;
-			if(otherPart < part) break;
-		}
-
-		if(partNum >= partCount && other.length > partCount) result = other;
-	}
-
-	return(result.join('.'));
-}
-
-function getRootConfigPaths(baseKey: string) {
-	let start = skipSlashes(baseKey, baseKey.lastIndexOf(nodeModules), 3);
-
-	const result: string[] = [];
-	let end = baseKey.length;
-
-	// List parent directories from caller path while it contains
-	// more than 3 slashes (starting from beginning or including last
-	// /node_modules/<name>/).
-	do {
-		end = baseKey.lastIndexOf('/', end - 1);
-		result.push(baseKey.substr(0, end));
-	} while(end > start);
-
-	return result;
-}
-
-export function getRepoPaths(loader: Loader, basePkgName: string | false, baseKey: string) {
-	let start = skipSlashes(baseKey, 0, 3);
-
-	const resultPreferred: { isPreferred?: boolean, root: string, isCDN?: boolean }[] = [];
-	const resultOther: { isPreferred?: boolean, root: string, isCDN?: boolean }[] = [];
-	let next = baseKey.lastIndexOf('/');
-	let end: number;
-
-	function addRepo(len: number, suffix: string) {
-		const root = baseKey.substr(0, len) + suffix;
-		const kind = loader.repoTbl[root];
-		(kind ? resultPreferred : resultOther).push({
-			isPreferred: !!kind,
-			root,
-			isCDN: (kind == RepoKind.CDN)
-		});
-	}
-
-	// List parent directories from caller path while it contains
-	// more than 3 slashes (starting from beginning or including last
-	// /node_modules/<name>/).
-	do {
-		end = next;
-		next = baseKey.lastIndexOf('/', end - 1);
-
-		const chunk = baseKey.substr(next, end - next + 1);
-		if(
-			basePkgName &&
-			chunk.substr(1, basePkgName.length) == basePkgName &&
-			reVersion.test(chunk.substr(basePkgName.length + 1))
-		) {
-			addRepo(next, '/');
-		}
-
-		if(chunk != nodeModules) addRepo(end, nodeModules);
-	} while(end > start);
-
-	resultOther.push({ isPreferred: true, root: loader.cdn, isCDN: true });
-
-	return resultPreferred.concat(resultOther);
-}
-
-function parsePackage(loader: Loader, rootKey: string, data: string, name?: string) {
-	const json = JSON.parse(data);
-	name = name || json.name;
-	if(!name) throw(new Error('Nameless package ' + rootKey));
-
-	const pkg = new Package(name, rootKey);
-	pkg.version = json.version;
-	pkg.main = json.main || 'index.js';
-
-	const meta = loader.packageMetaTbl[name] || (loader.packageMetaTbl[name] = {});
-	// TODO: Put lockedVersion instead of suggestedVersion in rootKey and others.
-	meta.lockedVersion = pkg.version;
-
-	const browser = !features.isNode && json.browser;
-
-	// TODO: Handle dependency versions and the browser field.
-
-	if(typeof browser == 'string') {
-		// Use browser entry point.
-		pkg.main = browser;
-	} else if(typeof browser == 'object') {
-		// Use browser equivalents of packages and files.
-
-		for(let key in browser) {
-			if(!browser.hasOwnProperty(key)) continue;
-
-			const src = URL.resolve(rootKey + '/', key);
-			const dst = browser[key] || '@empty';
-
-			const match = key.match(rePackage);
-			if(match) {
-				pkg.map[key] = dst;
-			}
-
-			pkg.map[src] = dst;
-			pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
-		}
-	}
-
-	for(let dep of Object.keys(json.dependencies || {})) {
-		const depMeta = loader.packageMetaTbl[dep] || (loader.packageMetaTbl[dep] = {});
-		const versionList = json.dependencies[dep].split(/ *\|\| *| +(- +)?/);
-
-		depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
-	}
-
-	return pkg;
 }
 
 function ifExists(loader: Loader, key: string) {
@@ -174,7 +25,7 @@ function ifExistsList(loader: Loader, list: string[], pos: number): Promise<stri
 }
 
 function parseFetchedPackage(
-	loader: Loader,
+	manager: PackageManager,
 	rootKey: string,
 	fetched: Promise<FetchResponse>,
 	name?: string
@@ -185,18 +36,15 @@ function parseFetchedPackage(
 		redirKey = decodeURI(getDir(res.url));
 		return res.text();
 	}).then((data: string) => {
-		const pkg = parsePackage(loader, redirKey, data, name)
-		loader.packageConfTbl[rootKey] = pkg;
-		loader.packageConfTbl[redirKey] = pkg;
-		loader.packageRootTbl[rootKey] = pkg;
-		loader.packageRootTbl[redirKey] = pkg;
+		const pkg = parsePackage(manager, redirKey, data, name)
+		manager.registerPackage(pkg, rootKey);
 		return pkg;
 	}).catch(() => {
-		loader.packageConfTbl[rootKey] = false;
+		manager.packageConfTbl[rootKey] = false;
 		return Promise.reject(false);
 	});
 
-	loader.packageConfTbl[rootKey] = parsed;
+	manager.packageConfTbl[rootKey] = parsed;
 	return parsed;
 }
 
@@ -206,14 +54,15 @@ function fetchPackage(
 	name: string,
 	repoNum = 0
 ): Promise<Package | false> {
+	const manager = loader.manager;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
-	const meta = loader.packageMetaTbl[name] || {};
+	const meta = manager.packageMetaTbl[name] || {};
 
 	let version = (repo.isCDN && (meta.lockedVersion || meta.suggestedVersion)) || '';
 	version = (version && '@') + version;
 
-	let parsed = loader.packageConfTbl[repoKey + name + version];
+	let parsed = manager.packageConfTbl[repoKey + name + version];
 
 	if(parsed === false) {
 		parsed = Promise.reject(parsed);
@@ -223,12 +72,12 @@ function fetchPackage(
 			ifExists(loader, jsonKey).then((key: string) => {
 				// A repository was found so look for additional packages there
 				// before other addresses.
-				if(repoKey) loader.repoTbl[repoKey] = repo.isCDN ? RepoKind.CDN : RepoKind.NORMAL;
+				if(repoKey) manager.repoTbl[repoKey] = repo.isCDN ? RepoKind.CDN : RepoKind.NORMAL;
 				return loader.fetch(key);
 			})
 		);
 
-		parsed = parseFetchedPackage(loader, repoKey + name + version, fetched, name);
+		parsed = parseFetchedPackage(manager, repoKey + name + version, fetched, name);
 	}
 
 	return Promise.resolve<Package | false>(parsed).catch(
@@ -237,26 +86,27 @@ function fetchPackage(
 }
 
 function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string | undefined) {
-	let parsed = loader.packageConfTbl[key];
+	const manager = loader.manager;
+	let parsed = manager.packageConfTbl[key];
 
 	if(parsed === false) {
 		parsed = Promise.reject(parsed);
 	} else if(!parsed) {
-		parsed = parseFetchedPackage(loader, key, loader.fetch(key + '/package.json'));
+		parsed = parseFetchedPackage(manager, key, loader.fetch(key + '/package.json'));
 	} else if(parsed instanceof Package) {
-		loader.packageRootTbl[key] = parsed;
+		manager.packageRootTbl[key] = parsed;
 		return Promise.resolve(parsed);
 	}
 
 	const result = parsed.catch(() => {
 		const nextKey = getNext();
 		// On error always try the next possible (parent) directory.
-		return nextKey ? loader.packageRootTbl[nextKey] : false;
+		return nextKey ? manager.packageRootTbl[nextKey] : false;
 	}).then(
-		(pkg: false | Package) => loader.packageRootTbl[key] = pkg
+		(pkg: false | Package) => manager.packageRootTbl[key] = pkg
 	);
 
-	loader.packageRootTbl[key] = result;
+	manager.packageRootTbl[key] = result;
 	return result;
 }
 
@@ -264,7 +114,8 @@ function tryFetchPackageRoot(loader: Loader, key: string, getNext: () => string 
   * Try to find package.json files in parent paths. */
 
 function fetchContainingPackage(loader: Loader, baseKey: string) {
-	const packageRootTbl = loader.packageRootTbl;
+	const manager = loader.manager;
+	const packageRootTbl = manager.packageRootTbl;
 	const rootConfigPaths = getRootConfigPaths(baseKey);
 	let pkg: undefined | false | Package | Promise<false | Package>;
 
@@ -398,7 +249,8 @@ export class NodeResolve implements LoaderPlugin {
 
 	resolveSync(key: string, baseKey: string, ref?: DepRef) {
 		const loader = this.loader;
-		let pkg = loader.getPackage(baseKey) || loader.package;
+		const manager = loader.manager;
+		let pkg = manager.getPackage(baseKey) || loader.package;
 		let resolvedKey = key;
 		let mappedKey: string;
 		let count = 8;
@@ -432,9 +284,9 @@ export class NodeResolve implements LoaderPlugin {
 			if(match) {
 				name = match[1];
 				path = match[3];
-				otherPkg = loader.packageNameTbl[name];
+				otherPkg = manager.packageNameTbl[name];
 			} else {
-				otherPkg = loader.getPackage(resolvedKey);
+				otherPkg = manager.getPackage(resolvedKey);
 				if(!otherPkg) break;
 				name = otherPkg.name;
 				path = resolvedKey.substr(otherPkg.root.length);
@@ -475,6 +327,7 @@ export class NodeResolve implements LoaderPlugin {
 
 	resolve(key: string, baseKey: string, ref: DepRef = {}): Promise<string> {
 		const loader = this.loader;
+		const manager = loader.manager;
 		let resolvedKey: string;
 		let packageName: string | undefined;
 
@@ -488,16 +341,16 @@ export class NodeResolve implements LoaderPlugin {
 			packageName = ref.pendingPackageName;
 
 			if(packageName) {
-				parsed = loader.packageNameTbl[packageName];
+				parsed = manager.packageNameTbl[packageName];
 
 				if(parsed === void 0) {
 					parsed = fetchPackage(
 						loader,
-						getRepoPaths(loader, parentPackageName, baseKey),
+						getRepoPaths(manager, parentPackageName, baseKey),
 						packageName
 					);
 
-					loader.packageNameTbl[packageName] = parsed as Promise<Package | false>;
+					manager.packageNameTbl[packageName] = parsed as Promise<Package | false>;
 				}
 			}
 
@@ -511,7 +364,7 @@ export class NodeResolve implements LoaderPlugin {
 			}
 
 			if(pkg) {
-				loader.packageNameTbl[packageName!] = pkg;
+				manager.packageNameTbl[packageName!] = pkg;
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
 			}
 

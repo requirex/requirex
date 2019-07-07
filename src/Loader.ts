@@ -1,6 +1,7 @@
 import { URL, getDir } from './URL';
 import { ModuleType } from './Module';
 import { Package } from './Package';
+import { PackageManager } from './PackageManager';
 import { Record, DepRef, ModuleFormat } from './Record';
 import { features, origin, assign } from './platform';
 import { FetchResponse, FetchOptions } from './fetch';
@@ -54,16 +55,6 @@ export interface BuiltSpec {
 	/** File names, formats and dependency names mapped to their index in the
 	  * bundle, or -1 if defined elsewhere. */
 	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
-}
-
-export interface PackageMeta {
-	lockedVersion?: string;
-	suggestedVersion?: string;
-}
-
-export const enum RepoKind {
-	NORMAL = 1,
-	CDN = 2
 }
 
 function getAllDeps(
@@ -167,10 +158,7 @@ export class Loader implements LoaderPlugin {
 
 	config(config: LoaderConfig) {
 		if(config.baseURL) this.baseURL = config.baseURL;
-		if(config.cdn) {
-			this.repoTbl[config.cdn] = RepoKind.CDN;
-			this.cdn = config.cdn;
-		}
+		if(config.cdn) this.manager.registerCDN(config.cdn);
 
 		const registry = config.registry || {};
 
@@ -202,16 +190,6 @@ export class Loader implements LoaderPlugin {
 
 	import(importKey: string, parent?: string) {
 		return fetchTranslate(this, true, importKey, parent);
-	}
-
-	getPackage(key: string) {
-		let end = key.length;
-
-		do {
-			const pkg = this.packageRootTbl[key.substr(0, end)];
-
-			if(pkg && pkg instanceof Package) return pkg;
-		} while((end = key.lastIndexOf('/', end - 1)) >= 0);
 	}
 
 	resolveSync(key: string, callerKey?: string, ref?: DepRef) {
@@ -560,9 +538,7 @@ export class Loader implements LoaderPlugin {
 			pkg.main = pkgSpec.main;
 			pkg.map = pkgSpec.map;
 
-			this.packageNameTbl[pkg.name] = pkg;
-			this.packageConfTbl[pkg.root] = pkg;
-			this.packageRootTbl[pkg.root] = pkg;
+			this.manager.registerPackage(pkg);
 
 			for(let [key, format, deps, compiled] of pkgSpec.files) {
 				const resolvedKey = !pkg.root ? key : URL.resolve(pkg.root + '/', key);
@@ -602,20 +578,10 @@ export class Loader implements LoaderPlugin {
 		}
 	}
 
-	package = new Package('_', '');
-
-	/** Map package name to configuration metadata. */
-	packageMetaTbl: { [name: string]: PackageMeta } = {};
-
-	packageNameTbl: { [name: string]: Package | false | Promise<Package | false> } = {};
-	packageConfTbl: { [resolvedRoot: string]: Package | false | Promise<Package | false> } = {};
-	/** Map resolved keys to containing packages (keys not corresponding to a package root
-	  * resolve to the same result as their parent directory does). */
-	packageRootTbl: { [resolvedRoot: string]: Package | false | Promise<Package | false> } = {};
-	repoTbl: { [resolvedPath: string]: true } = {}
-	cdn: string;
-
 	private currentConfig: LoaderConfig = {};
+
+	manager = new PackageManager();
+	package = new Package('_', '');
 
 	/** Paths to node-modules directories containing modules under development,
 	  * to avoid aggressively caching their contents and better support
