@@ -17,6 +17,10 @@ export class PackageManager {
 		this.cdn = cdn;
 	}
 
+	registerMeta(name: string) {
+		return this.packageMetaTbl[name] || (this.packageMetaTbl[name] = {});
+	}
+
 	registerPackage(pkg: Package, rootKey?: string) {
 		this.packageNameTbl[pkg.name] = pkg;
 		this.packageConfTbl[pkg.root] = pkg;

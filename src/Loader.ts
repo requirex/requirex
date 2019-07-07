@@ -3,10 +3,8 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { PackageManager } from './PackageManager';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, assign } from './platform';
+import { features, origin, assign, emptyPromise } from './platform';
 import { FetchResponse, FetchOptions } from './fetch';
-
-const emptyPromise = Promise.resolve(void 0);
 
 export interface LoaderPlugin {
 	fetchRecord?(record: Record): Promise<void>;
@@ -599,6 +597,9 @@ export class Loader implements LoaderPlugin {
 
 	cwd: string;
 	baseURL?: string;
+
+	/** First file that called System.import.
+	  * Used for checking if an address is local to the current project. */
 	firstParent?: string;
 
 	plugins: { [name: string]: LoaderPlugin } = {};

@@ -1,11 +1,9 @@
 import { URL } from '../URL';
 import { Record } from '../Record';
-import { unsupported, features, nodeRequire, assign } from '../platform';
+import { unsupported, features, nodeRequire, assign, emptyPromise } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
 type NodeCB<Type> = (err: NodeJS.ErrnoException | null, res?: Type) => void;
-
-const emptyPromise = Promise.resolve();
 
 /** Node.js load plugin for built-in modules. */
 
