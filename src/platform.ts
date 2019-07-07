@@ -6,6 +6,7 @@ declare const process: any;
 
 export const unsupported = 'Unsupported function ';
 export const globalEnv: { [name: string]: any } = typeof self == 'object' ? self : global;
+export const emptyPromise = Promise.resolve(void 0);
 
 const isNode = (
 	typeof process == 'object' &&

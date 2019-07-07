@@ -57,7 +57,7 @@ function fetchPackage(
 	const manager = loader.manager;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
-	const meta = manager.packageMetaTbl[name] || (manager.packageMetaTbl[name] = {});
+	const meta = manager.registerMeta(name);
 	let version = '';
 
 	if(repo.isCDN) {

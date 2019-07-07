@@ -112,7 +112,7 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 
 	const version = json.version;
 
-	const meta = manager.packageMetaTbl[name] || (manager.packageMetaTbl[name] = {});
+	const meta = manager.registerMeta(name);
 	meta.lockedVersion = version;
 
 	if(meta.suggestedVersion) {
@@ -148,7 +148,7 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	}
 
 	for(let dep of Object.keys(json.dependencies || {})) {
-		const depMeta = manager.packageMetaTbl[dep] || (manager.packageMetaTbl[dep] = {});
+		const depMeta = manager.registerMeta(dep);
 		const versionList = json.dependencies[dep].split(/ *\|\| *| +(- +)?/);
 
 		depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
