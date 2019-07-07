@@ -100,10 +100,14 @@ export class Record {
 		this.argValues = argNames.map((name: string) => args[name]);
 	}
 
-	wrap() {
+	wrap(debug?: boolean) {
 		return this.sourceCode && (
 			'(function(' + this.argNames.join(', ') + ') {\n' +
 			this.sourceCode +
+			(debug ?
+				'\n//# sourceURL=' + this.resolvedKey /*+ (sourceMap ? '!transpiled' : '')*/ :
+				''
+			) +
 			// Break possible source map comment on the last line.
 			'\n})'
 		);

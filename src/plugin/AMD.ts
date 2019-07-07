@@ -168,7 +168,7 @@ export class AMD implements LoaderPlugin {
 		});
 
 		try {
-			const compiled = record.compiled || globalEval(record.wrap());
+			const compiled = record.compiled || globalEval(record.wrap(true));
 
 			// Call imported module.
 			compiled.apply(globalEnv, record.argValues);

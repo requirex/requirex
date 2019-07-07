@@ -63,7 +63,7 @@ export class CJS implements LoaderPlugin {
 		if(!compiled) {
 			try {
 				// Compile module into a function under global scope.
-				compiled = globalEval(record.wrap());
+				compiled = globalEval(record.wrap(true));
 			} catch(err) {
 				record.loadError = err;
 				throw err;
