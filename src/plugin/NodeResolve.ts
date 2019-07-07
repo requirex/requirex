@@ -2,11 +2,27 @@ import { URL, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { PackageManager, RepoKind } from '../PackageManager';
-import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage } from '../PackageManagerNode';
+import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
+import { emptyPromise } from '../platform';
 import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
 
 const isInternal: { [key: string]: boolean } = {};
+
+interface PackageLock {
+	name: string;
+	version: string;
+	lockfileVersion: number;
+	dependencies?: {
+		[name: string]: {
+			version: string;
+			integrity?: string;
+			resolved?: string;
+			dev?: boolean;
+			requires?: { [name: string]: string };
+		}
+	};
+}
 
 for(let key of 'assert buffer crypto events fs http https module net os path stream url util vm zlib'.split(' ')) {
 	isInternal[key] = true;
@@ -176,6 +192,37 @@ function fetchContainingPackage(loader: Loader, baseKey: string) {
 	return Promise.resolve<Package | false>(pkg || false);
 }
 
+function fetchLock(loader: Loader, pkg: Package) {
+	const manager = loader.manager;
+
+	return loader.fetch(pkg.root + '/npm-shrinkwrap.json').catch(
+		() => loader.fetch(pkg.root + '/package-lock.json')
+	).then(
+		(res) => res.text()
+	).then((data: string) => {
+		const json: PackageLock = JSON.parse(data);
+
+		if(
+			json.name != pkg.name ||
+			json.version != pkg.version ||
+			json.lockfileVersion != 1
+		) return;
+
+		const depTbl = json.dependencies || {};
+
+		for(let name in depTbl) {
+			if(depTbl.hasOwnProperty(name)) {
+				const depVersion = depTbl[name].version;
+
+				if(depVersion) {
+					const meta = manager.registerMeta(name);
+					meta.lockedVersion = depVersion;
+				}
+			}
+		}
+	}).catch(() => { });
+}
+
 function inRegistry(loader: Loader, key: string) {
 	return loader.registry[key] || loader.records[key];
 }
@@ -336,6 +383,27 @@ export class NodeResolve implements LoaderPlugin {
 		// Find a package containing baseKey, to get browser path and
 		// package mappings and versions.
 		const result = fetchContainingPackage(loader, baseKey).then((basePkg: Package | false) => {
+			if(ref.isImport && basePkg && this.lockReady == emptyPromise) {
+				// If running import for the first time and a package
+				// configuration was found in a directory containing or under
+				// the base address, look for a lock file defining the exact
+				// versions of all dependencies.
+
+				const origin = loader.baseURL || loader.firstParent || baseKey;
+				const prefix = URL.common(origin, basePkg.root + '/');
+
+				if(
+					prefix > 8 &&
+					(
+						prefix >= origin.length ||
+						prefix >= basePkg.root.length
+					) &&
+					basePkg.root.substr(prefix - 1).indexOf(nodeModules) < 0
+				) {
+					this.lockReady = fetchLock(loader, basePkg);
+				}
+			}
+
 			resolvedKey = loader.resolveSync(key, baseKey, ref);
 			const parentPackageName = basePkg && basePkg.name;
 			let parsed: Package | false | undefined | Promise<Package | false | undefined>;
@@ -346,11 +414,11 @@ export class NodeResolve implements LoaderPlugin {
 				parsed = manager.packageNameTbl[packageName];
 
 				if(parsed === void 0) {
-					parsed = fetchPackage(
+					parsed = this.lockReady.then(() => fetchPackage(
 						loader,
 						getRepoPaths(manager, parentPackageName, baseKey),
-						packageName
-					);
+						packageName!
+					));
 
 					manager.packageNameTbl[packageName] = parsed as Promise<Package | false>;
 				}
@@ -388,5 +456,7 @@ export class NodeResolve implements LoaderPlugin {
 
 		return result;
 	}
+
+	lockReady: Promise<void> = emptyPromise;
 
 }

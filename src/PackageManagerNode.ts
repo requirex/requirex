@@ -3,7 +3,7 @@ import { Package } from './Package';
 import { PackageManager, RepoKind } from './PackageManager';
 import { features } from './platform';
 
-const nodeModules = '/node_modules/';
+export const nodeModules = '/node_modules/';
 
 /** Valid npm package name. */
 const reName = '[0-9a-z][-_.0-9a-z]*';
