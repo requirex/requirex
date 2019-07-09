@@ -273,13 +273,42 @@ with only the basic functionality needed internally by the loader and its most i
 
 ### Cache
 
+- Stores less than half a megabyte sized downloaded files and transpilation results in `window.localStorage`.
+- Adds browser cache busting for downloads located under `window.origin` but not under a `node_modules` directory.
+- Compares downloaded files with the previous version to avoid re-transpiling unchanged files.
+
 ### CJS
+
+- Handles importing the CommonJS format and synchronous `require()` calls.
+- Relies on the `JS` plugin and main loader to detect and fetch dependencies before running.
 
 ### CSS
 
+- Transpiles CSS files using PostCSS and injects them on the page using `style` elements.
+- Handles necessary URL transformations and webpack-style `@import` with a `~` prefix forcing Node.js module resolution.
+
 ### Document
 
+Waits until the DOM is ready and then executes all script elements with an `x-req` prefix in their `type`,
+in order of appearance on the page.
+
+Usage in HTML:
+
+```html
+<script src="index.ts" type="x-req-application/x-typescript"></script>
+
+<script type="x-req-application/javascript">
+// Your code here.
+</script>
+```
+
 ### JS
+
+- Detects the module format used in a `.js` file and delegates it to the correct plugin.
+- Lists CommonJS-style dependencies to ensure the loader fetches them first, allowing synchronous `require()` calls.
+- Forces transpilation to ES5 if ES6 code unsupported by the current JavaScript engine is detected.
+- Handles conditional compilation by detecting `if` statements conditioned on `process.env.NODE_ENV` and passing the condition to `eval`.
+  - If no error was encountered, removes the test and any related statements that became dead code.
 
 ### JSON
 
