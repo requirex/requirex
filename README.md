@@ -10,74 +10,50 @@
 [![install size](https://img.shields.io/bundlephobia/min/requirex.svg)](https://bundlephobia.com/result?p=requirex)
 [![license](https://img.shields.io/npm/l/requirex.svg)](https://raw.githubusercontent.com/requirex/requirex/master/LICENSE)
 
-<h1>requirex</h1>
+<h1>RequireX</h1>
 </div>
+
+## Web dev, without the crud
 
 **REQUIREX IS NOT READY. NOT EVERYTHING BELOW IS TRUE.**
 
-`requirex` is not only a zero-configuration module loader for browsers and Node.js.
-It's also **a revolution**:
 
-- **Modern**. Supports ES6, React, PostCSS and TypeScript (made with it, even) out of the box.
+```html
+<!-- RequireX from CDN -->
+<script src="https://cdn.jsdelivr.net/npm/requirex"></script>
+
+<!-- Your fancy modern web code -->
+<script type="x-req-application/javascript">
+  // or set src="./App.tsx"
+
+  import * as React from 'react';
+  import * as ReactDOM from 'react-dom';
+
+  ReactDOM.render(
+    <h1 style={{ color: 'red' }}>Hello, World!</h1>, 
+    document.body
+  );
+</script>
+
+<body></body>
+```
+
+`requirex` is a revolutionary zero-configuration module loader for browsers and Node.js:
+
+- **Simpler**. Forget Webpack, Babel, Brunch, Rollup, SystemJS, Parcel, Browserify...
+- **Modern**. Supports ES6, TypeScript, React, PostCSS, LESS, and NPM out of the box.
   - All npm packages and the latest development toolchain at your disposal.
 - **Faster**. Get started with a project immediately. Nothing to install or configure.
   - No need to install npm packages, just use them.
   - Instantly bundle transpiled code and all your dependencies for distribution.
-- **Simpler**. Makes webpack, Babel and even Node.js optional.
-- **Safer**. Runs locally in the browser, not in the cloud (unless you put it there).
+- **Safer**. Runs in the browser, not in the cloud (unless you put it there).
   - Does not run malicious (or any other) shell scripts.
   - Does not leak your code to 3rd parties.
   - Lock down dependency versions, bundle code to avoid CDN-related vulnerabilities.
-- **Lighter**. It's less than 50kb. About 99.99998% smaller than [create-react-app](https://github.com/facebook/create-react-app#readme) and an empty project.
-- **The best way to work with JavaScript, period.**
+- **Lighter**. Less than 50kb. About 99.99998% smaller than [create-react-app](https://github.com/facebook/create-react-app#readme) and an empty project.
 
-## Getting started
 
-Save this in an `index.html` file somewhere:
-
-```html
-<!doctype html>
-<html><head>
-  <title>Hello requirex</title>
-  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
-
-  <!-- Use requirex. -->
-  <script src="https://cdn.jsdelivr.net/npm/requirex"></script>
-  <script type="x-req-application/javascript">
-    // Your code goes below.
-    import * as React from 'react';
-    import * as ReactDOM from 'react-dom';
-
-    const element = <h1 style={{ color: 'red' }}>Hello, World!</h1>;
-
-    ReactDOM.render(element, document.body);
-  </script>
-</head><body>
-
-</body></html>
-```
-
-Did you publish it online? If yes, open it and see it already work. It automatically fetched react and transpiled the JSX syntax.
-Loaded slowly? Well, quite a bit just happened there. But try reloading: it's instant.
-That's also the speed users get after you [bundle](#bundling-for-production) it.
-
-Saved it on your own device? [Download this as serve.bat](https://raw.githubusercontent.com/requirex/requirex/master/example/browser/serve.bat) in the same directory and run it. Just double click it on Windows or make it executable and run it like this on Linux, OS X or Android under [Termux](https://termux.com/) (yes, the same script works on **all** common operating systems):
-
-```bash
-chmod a+x serve.bat
-./serve.bat
-```
-
-It runs a web server on your own device, publishing the project for local use at the address [http://127.0.0.1:8080/](http://127.0.0.1:8080/). Click that link to see it.
-
-You need a server because browser security rules don't allow html files from the local file system to access remote addresses, such as the CDN hosting `react` and `react-dom`.
-The browser security sandbox is a big benefit when dealing with unknown or misspelled npm packages.
-
-If that example contained too many moving parts, don't worry because there's a [tutorial](#tutorial).
-
-You don't need Node.js. It's OK to use it, but it's *optional*.
-
-More information in the:
+# RequireX in the wild
 
 # User Guide
 
@@ -91,9 +67,8 @@ More information in the:
 
 ## Benefits
 
-These are too numerous to list, so let's go with some main ones for developers with different amounts of experience. See more under [Features](#features).
 
-`requirex` is simple in the *painless* sense, but extremely *advanced*. It's for *everyone*.
+`RequireX` is simple in the *painless* sense, but extremely *advanced*. It's for *everyone*.
 
 - Beginners
   - Get started with the fun part of development immediately.
@@ -102,7 +77,8 @@ These are too numerous to list, so let's go with some main ones for developers w
 
 - Intermediate
   - Painlessly use proper tools even in small projects.
-  - Avoid getting hosed by backdoors in hijacked npm packages.
+  - Avoid backdoors in hijacked npm packages.
+  - Reclaim gigabytes worth of `node_modules` directories
 
 - Highly experienced
   - Set up quick demos with no boilerplate.
