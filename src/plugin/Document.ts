@@ -46,6 +46,7 @@ export class Document implements LoaderPlugin {
 	}
 
 	discover(record: Record) {
+		const key = origin + window.location.pathname;
 		let num = 0;
 
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
@@ -54,11 +55,11 @@ export class Document implements LoaderPlugin {
 				element.setAttribute('type', '-' + type);
 
 				if(element.src) {
-					record.addDep(URL.resolve(origin, element.src));
+					record.addDep(URL.resolve(key, element.src));
 				} else {
 					++num;
 
-					record.addDep(URL.resolve(origin, '#' + num + '.js'), {
+					record.addDep(URL.resolve(key, '#' + num + '.js'), {
 						format: 'js',
 						sourceCode: element.text
 					});
