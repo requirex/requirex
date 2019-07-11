@@ -30,6 +30,10 @@ export class PackageManager {
 			this.packageConfTbl[rootKey] = pkg;
 			this.packageRootTbl[rootKey] = pkg;
 		}
+
+		const meta = this.registerMeta(pkg.name);
+
+		if(!meta.lockedVersion) meta.lockedVersion = pkg.version;
 	}
 
 	getPackage(key: string) {
