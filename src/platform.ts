@@ -57,6 +57,22 @@ export function assign(dst: { [key: string]: any }, src: { [key: string]: any })
 	return(dst);
 }
 
+export function deepAssign(dst: { [key: string]: any }, src: { [key: string]: any }) {
+	for(let name in src) {
+		if(src.hasOwnProperty(name)) {
+			let value = src[name];
+
+			if(typeof value == 'object' && !(value instanceof Array)) {
+				value = deepAssign(dst[name] || {}, value);
+			}
+
+			dst[name] = value;
+		}
+	}
+
+	return(dst);
+}
+
 const nodeRegistry: { [name: string]: any } = {};
 const req = typeof require == 'function' && require;
 
