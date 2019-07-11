@@ -111,9 +111,7 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	if(!name) throw(new Error('Nameless package ' + rootKey));
 
 	const version = json.version;
-
 	const meta = manager.registerMeta(name);
-	meta.lockedVersion = version;
 
 	if(meta.suggestedVersion) {
 		rootKey = rootKey.replace('@' + meta.suggestedVersion, '@' + version);

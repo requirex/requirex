@@ -47,6 +47,7 @@ export type SystemFactory = (exports?: any, module?: ModuleType) => SystemDeclar
 
 export interface BuiltSpec {
 	name: string;
+	version: string;
 	root: string;
 	main: string;
 	map: { [key: string]: string };
@@ -496,10 +497,17 @@ export class Loader implements LoaderPlugin {
 			return 'System.built(1,[{\n\t' + pkgList.map((name: string) => {
 				const spec = pkgTbl[name];
 				const pkg = spec.package;
-				return [
-					'name: ' + str(pkg.name),
-					'root: ' + str(parent ? URL.relative(parent, pkg.root) : pkg.root),
-					'main: ' + str(pkg.main),
+				const fields = ['name: ' + str(pkg.name)];
+
+				if(pkg.version) fields.push('version: ' + str(pkg.version));
+				if(pkg.root) {
+					fields.push('root: ' + str(
+						parent ? URL.relative(parent, pkg.root) : pkg.root
+					));
+				}
+				if(pkg.main) fields.push('main: ' + str(pkg.main));
+
+				fields.push(
 					'map: ' + str(pkg.map),
 					'files: [\n\t\t[\n' + spec.records.map((record: Record) => {
 						const plugin = this.plugins[record.format!] || this;
@@ -519,7 +527,9 @@ export class Loader implements LoaderPlugin {
 							code
 						].join(', ');
 					}).join('\n\t\t], [\n') + '\n\t\t]\n\t]'
-				].join(',\n\t');
+				);
+
+				return fields.join(',\n\t');
 			}).join('\n}, {\n\t') + '\n}]);';
 		});
 	}
@@ -533,6 +543,7 @@ export class Loader implements LoaderPlugin {
 
 		for(let pkgSpec of specList) {
 			const pkg = new Package(pkgSpec.name, pkgSpec.root);
+			pkg.version = pkgSpec.version;
 			pkg.main = pkgSpec.main;
 			pkg.map = pkgSpec.map;
 
