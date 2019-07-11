@@ -67,6 +67,10 @@ export const System = new Loader({
 		// Prevent TypeScript compiler from importing an optional module.
 		'source-map-support': {},
 		requirex
+	},
+	dependencies: {
+		'typescript': '^3',
+		'requirex-postcss-bundle': '~0.0.2'
 	}
 });
 

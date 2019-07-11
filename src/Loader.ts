@@ -3,7 +3,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { PackageManager } from './PackageManager';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, assign, emptyPromise } from './platform';
+import { features, origin, assign, deepAssign, emptyPromise } from './platform';
 import { FetchResponse, FetchOptions } from './fetch';
 
 export interface LoaderPlugin {
@@ -30,6 +30,8 @@ export interface LoaderConfig {
 	globals?: { [name: string]: any };
 	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
 	registry?: { [name: string]: any };
+
+	dependencies?: { [name: string]: string };
 
 	postCSS?: boolean;
 	minifyCSS?: boolean;
@@ -176,8 +178,17 @@ export class Loader implements LoaderPlugin {
 			}
 		}
 
+		const dependencies = config.dependencies || {};
+
+		for(let name in dependencies) {
+			if(dependencies.hasOwnProperty(name)) {
+				const meta = this.manager.registerMeta(name);
+				if(!meta.suggestedVersion) meta.suggestedVersion = dependencies[name];
+			}
+		}
+
 		assign(this.globalTbl, config.globals || {});
-		assign(this.currentConfig, config);
+		deepAssign(this.currentConfig, config);
 	}
 
 	getConfig() {
