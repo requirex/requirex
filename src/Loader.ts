@@ -3,7 +3,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { PackageManager } from './PackageManager';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, assign, deepAssign, emptyPromise } from './platform';
+import { features, origin, assign, emptyPromise } from './platform';
 import { FetchResponse, FetchOptions } from './fetch';
 
 export interface LoaderPlugin {
@@ -188,7 +188,7 @@ export class Loader implements LoaderPlugin {
 		}
 
 		assign(this.globalTbl, config.globals || {});
-		deepAssign(this.currentConfig, config);
+		assign(this.currentConfig, config, 1);
 	}
 
 	getConfig() {
