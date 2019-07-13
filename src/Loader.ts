@@ -3,7 +3,7 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { PackageManager } from './PackageManager';
 import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, assign, emptyPromise } from './platform';
+import { features, origin, keys, assign, emptyPromise } from './platform';
 import { FetchResponse, FetchOptions } from './fetch';
 
 export interface LoaderPlugin {
@@ -29,11 +29,15 @@ export interface LoaderConfig {
 	cdn?: string;
 	globals?: { [name: string]: any };
 	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
+	/** Predefined module contents mapped to import names. */
 	registry?: { [name: string]: any };
 
+	/** Suggested dependency versions, format is like in package.json. */
 	dependencies?: { [name: string]: string };
 
+	/** Transpile imported CSS using PostCSS? */
 	postCSS?: boolean;
+	/** Minify transpiled CSS? */
 	minifyCSS?: boolean;
 }
 
@@ -48,10 +52,12 @@ export type SystemFactory = (exports?: any, module?: ModuleType) => SystemDeclar
 /** Serialized form of a bundled package. */
 
 export interface BuiltSpec {
+	/** Package name. */
 	name: string;
 	version: string;
 	root: string;
 	main: string;
+	/** Browser import mappings from package.json. */
 	map: { [key: string]: string };
 	/** File names, formats and dependency names mapped to their index in the
 	  * bundle, or -1 if defined elsewhere. */
@@ -163,28 +169,22 @@ export class Loader implements LoaderPlugin {
 
 		const registry = config.registry || {};
 
-		for(let name in registry) {
-			if(registry.hasOwnProperty(name)) {
-				this.registry[name] = { exports: registry[name], id: name };
-			}
+		for(let name of keys(registry)) {
+			this.registry[name] = { exports: registry[name], id: name };
 		}
 
 		const plugins = config.plugins || {};
 
-		for(let name in plugins) {
-			if(plugins.hasOwnProperty(name)) {
-				const plugin = new plugins[name](this);
-				this.plugins[name.toLowerCase()] = plugin;
-			}
+		for(let name of keys(plugins)) {
+			const plugin = new plugins[name](this);
+			this.plugins[name.toLowerCase()] = plugin;
 		}
 
 		const dependencies = config.dependencies || {};
 
-		for(let name in dependencies) {
-			if(dependencies.hasOwnProperty(name)) {
-				const meta = this.manager.registerMeta(name);
-				if(!meta.suggestedVersion) meta.suggestedVersion = dependencies[name];
-			}
+		for(let name of keys(dependencies)) {
+			const meta = this.manager.registerMeta(name);
+			if(!meta.suggestedVersion) meta.suggestedVersion = dependencies[name];
 		}
 
 		assign(this.globalTbl, config.globals || {});
@@ -579,15 +579,16 @@ export class Loader implements LoaderPlugin {
 		for(let record of recordList) {
 			const deps = depsList[num++];
 
-			for(let key in deps) {
-				if(deps.hasOwnProperty(key)) {
-					const depNum = deps[key];
-					if(depNum < 0) {
-						record.addDep(key, { module: this.registry[key] });
-					} else {
-						record.addDep(key, { record: recordList[depNum] });
-					}
-				}
+			for(let key of keys(deps)) {
+				const depNum = deps[key];
+
+				record.addDep(
+					key,
+					(depNum < 0 ?
+						{ module: this.registry[key] } :
+						{ record: recordList[depNum] }
+					)
+				);
 			}
 
 			if(this.discover(record)) {
@@ -609,6 +610,7 @@ export class Loader implements LoaderPlugin {
 
 	modulesBustTbl: { [resolvedRoot: string]: boolean } = {};
 
+	/** Global variables and their values, exposed to all imported code. */
 	globalTbl: { [name: string]: any } = {};
 
 	registry: { [resolvedKey: string]: ModuleType } = {};
@@ -624,6 +626,7 @@ export class Loader implements LoaderPlugin {
 	  * Used for checking if an address is local to the current project. */
 	firstParent?: string;
 
+	/** Constructed browser plugin instances. */
 	plugins: { [name: string]: LoaderPlugin } = {};
 
 }

@@ -1,9 +1,21 @@
 import { ModuleType } from './Module';
 import { Package } from './Package';
-import { assign } from './platform';
+import { keys, assign } from './platform';
 import { Loader } from './Loader';
 
-export type ModuleFormat = 'js' | 'amd' | 'cjs' | 'system' | 'ts' | 'tsx' | 'd.ts' | 'node' | 'document' | 'css' | 'cssraw';
+export type ModuleFormat = (
+	'js' |
+	'amd' |
+	'cjs' |
+	'system' |
+	'ts' |
+	'tsx' |
+	'd.ts' |
+	'node' |
+	'document' |
+	'css' |
+	'cssraw'
+);
 
 export type ModuleFactory = (...args: any[]) => any;
 
@@ -82,22 +94,24 @@ export class Record {
 	}
 
 	setArgs(...defs: { [name: string]: any }[]) {
-		const argNames = [];
-		const args: { [name: string]: any } = {};
+		const argTbl = this.argTbl;
 
 		for(let def of defs) {
-			for(let name in def) {
-				if(def.hasOwnProperty(name)) {
-					argNames.push(name);
-					args[name] = def[name];
-				}
+			for(let name of keys(def)) {
+				argTbl[name] = def[name];
 			}
+		}
+
+		const argNames = [];
+
+		for(let name of keys(argTbl)) {
+			argNames.push(name);
 		}
 
 		argNames.sort();
 
 		this.argNames = argNames;
-		this.argValues = argNames.map((name: string) => args[name]);
+		this.argValues = argNames.map((name: string) => argTbl[name]);
 	}
 
 	wrap(debug?: boolean) {
@@ -152,6 +166,7 @@ export class Record {
 	compiled: ModuleFactory;
 	factory: ModuleFactory;
 
+	argTbl: { [name: string]: any } = {};
 	argNames: string[];
 	argValues: any[];
 

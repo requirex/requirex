@@ -47,6 +47,19 @@ export const origin = (typeof window == 'object' &&
 	) : ''
 );
 
+export function keys(obj: { [key: string]: any }) {
+	const result: string[] = [];
+
+	for(let key in obj) {
+		// Object.create(null) produces objects with no built-in methods.
+		if(Object.prototype.hasOwnProperty.call(obj, key)) {
+			result.push(key);
+		}
+	}
+
+	return result;
+}
+
 /** Assign all members from src to dst object. */
 
 export function assign(
@@ -57,20 +70,27 @@ export function assign(
 	  * (latter will hang on circular structures). */
 	depth?: number
 ) {
-	for(let name in src) {
-		// Object.create(null) produces objects with no built-in methods.
-		if(Object.prototype.hasOwnProperty.call(src, name)) {
-			let value = src[name];
+	for(let name of keys(src)) {
+		let value = src[name];
 
-			if(depth && typeof value == 'object' && !(value instanceof Array)) {
-				value = assign(dst[name] || {}, value, depth - 1);
-			}
-
-			dst[name] = value;
+		if(depth && typeof value == 'object' && !(value instanceof Array)) {
+			value = assign(dst[name] || {}, value, depth - 1);
 		}
+
+		dst[name] = value;
 	}
 
 	return(dst);
+}
+
+export function makeTable(items: string) {
+	const result: { [key: string]: boolean } = {};
+
+	for(let key of items.split(' ')) {
+		result[key] = true;
+	}
+
+	return result;
 }
 
 const nodeRegistry: { [name: string]: any } = {};

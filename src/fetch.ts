@@ -2,7 +2,7 @@ import * as FS from 'fs';
 import * as HTTP from 'http';
 
 import { URL } from './URL';
-import { features, nodeRequire, assign } from './platform';
+import { features, nodeRequire, keys, assign } from './platform';
 
 export interface FetchOptions {
 	method?: string;
@@ -32,10 +32,8 @@ export class FetchResponse {
 		forEach: (handler: (value: string, name: string) => void, self?: any) => {
 			const headers = this._headers;
 
-			for(let name in headers) {
-				if(headers.hasOwnProperty(name)) {
-					handler.call(self, headers[name], name);
-				}
+			for(let name of keys(headers)) {
+				handler.call(self, headers[name], name);
 			}
 		}
 	};
@@ -77,12 +75,10 @@ function parseHeadersXHR(headers: string) {
 function parseHeadersNode(headers: HTTP.IncomingHttpHeaders) {
 	const result: FetchHeaders = {};
 
-	for(let name in headers) {
-		if(headers.hasOwnProperty(name)) {
-			const key = name.toLowerCase();
-			const prev = result[key];
-			result[key] = (prev ? prev + ', ' : '') + headers[name];
-		}
+	for(let name of keys(headers)) {
+		const key = name.toLowerCase();
+		const prev = result[key];
+		result[key] = (prev ? prev + ', ' : '') + headers[name];
 	}
 
 	return result;

@@ -3,11 +3,9 @@ import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { PackageManager, RepoKind } from '../PackageManager';
 import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
-import { emptyPromise } from '../platform';
+import { emptyPromise, makeTable, keys } from '../platform';
 import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
-
-const isInternal: { [key: string]: boolean } = {};
 
 interface PackageLock {
 	name: string;
@@ -24,9 +22,10 @@ interface PackageLock {
 	};
 }
 
-for(let key of 'assert buffer crypto events fs http https module net os path stream url util vm zlib'.split(' ')) {
-	isInternal[key] = true;
-}
+const isInternal = makeTable(
+	'assert buffer crypto events fs http https ' +
+	'module net os path stream url util vm zlib'
+);
 
 function ifExists(loader: Loader, key: string) {
 	// TODO: Fail for wrong MIME type (mainly html error messages).
@@ -210,14 +209,12 @@ function fetchLock(loader: Loader, pkg: Package) {
 
 		const depTbl = json.dependencies || {};
 
-		for(let name in depTbl) {
-			if(depTbl.hasOwnProperty(name)) {
-				const depVersion = depTbl[name].version;
+		for(let name of keys(depTbl)) {
+			const depVersion = depTbl[name].version;
 
-				if(depVersion) {
-					const meta = manager.registerMeta(name);
-					meta.lockedVersion = depVersion;
-				}
+			if(depVersion) {
+				const meta = manager.registerMeta(name);
+				meta.lockedVersion = depVersion;
 			}
 		}
 	}).catch(() => { });
