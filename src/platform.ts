@@ -47,23 +47,23 @@ export const origin = (typeof window == 'object' &&
 	) : ''
 );
 
-export function assign(dst: { [key: string]: any }, src: { [key: string]: any }) {
-	for(let name in src) {
-		if(src.hasOwnProperty(name)) {
-			dst[name] = src[name];
-		}
-	}
+/** Assign all members from src to dst object. */
 
-	return(dst);
-}
-
-export function deepAssign(dst: { [key: string]: any }, src: { [key: string]: any }) {
+export function assign(
+	dst: { [key: string]: any },
+	src: { [key: string]: any },
+	/** Recursion depth for nested objects.
+	  * 0 for no recursion, < 0 for unlimited depth
+	  * (latter will hang on circular structures). */
+	depth?: number
+) {
 	for(let name in src) {
-		if(src.hasOwnProperty(name)) {
+		// Object.create(null) produces objects with no built-in methods.
+		if(Object.prototype.hasOwnProperty.call(src, name)) {
 			let value = src[name];
 
-			if(typeof value == 'object' && !(value instanceof Array)) {
-				value = deepAssign(dst[name] || {}, value);
+			if(depth && typeof value == 'object' && !(value instanceof Array)) {
+				value = assign(dst[name] || {}, value, depth - 1);
 			}
 
 			dst[name] = value;
