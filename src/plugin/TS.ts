@@ -1,6 +1,7 @@
 import * as Lib from 'typescript';
 
 import { Record } from '../Record';
+import { makeTable, keys } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
@@ -9,9 +10,12 @@ declare module '../Record' {
 	}
 }
 
+const transpileFormats = makeTable('ts tsx jsx d.ts');
+
 function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
 	return ({
 		getCompilationSettings: () => ({
+			allowJs: true,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			target: ts.ScriptTarget.ES5,
@@ -21,30 +25,23 @@ function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
 			// module: ts.ModuleKind.System
 		}),
 		getScriptFileNames: () => {
-			const keys: string[] = [];
+			const result: string[] = [];
 
-			for(let key in loader.records) {
-				if(!loader.records.hasOwnProperty(key)) continue;
-
+			for(let key of keys(loader.records)) {
 				const record = loader.records[key];
-				const format = record.format;
 
-				if(format == 'ts' || format == 'd.ts' || record.tsSnapshot) {
-					keys.push(key.replace(/\.js$/, '.ts'));
-				}
-
-				if(format == 'tsx') {
-					keys.push(key.replace(/\.js$/, '.tsx'));
+				if(transpileFormats[record.format!] || record.tsSnapshot) {
+					result.push(key);
 				}
 			}
 
-			return keys;
+			return result;
 		},
 		getScriptVersion: (key: string) => {
 			return '0';
 		},
 		getScriptSnapshot: (key: string) => {
-			const record = loader.records[key] || loader.records[key.replace(/\.tsx?$/, '.js')];
+			const record = loader.records[key];
 
 			return record.tsSnapshot || (
 				record.tsSnapshot = ts.ScriptSnapshot.fromString(record.sourceCode)
@@ -93,10 +90,10 @@ export class TS implements LoaderPlugin {
 
 	translate(record: Record) {
 		if(record.format == 'd.ts') return;
-		const tsKey = record.resolvedKey.replace(/\.js$/, '.' + record.format);
-		const jsKey = record.resolvedKey.replace(/\.tsx?$/, '.js');
+		const key = record.resolvedKey;
+		const jsKey = record.resolvedKey.replace(/\.[jt]sx?$/, '.js');
 
-		for(let info of this.tsService.getEmitOutput(tsKey).outputFiles) {
+		for(let info of this.tsService.getEmitOutput(key).outputFiles) {
 			if(info.name == jsKey) {
 				record.format = 'js';
 				record.sourceCode = info.text;
