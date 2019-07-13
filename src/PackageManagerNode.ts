@@ -22,6 +22,13 @@ export const rePackage = new RegExp(
 	'(\/.*)?$'
 );
 
+function parserSemverPart(part: string) {
+	part = part.replace(/^[ <=>~^]+ */, '');
+
+	if(!part || part == 'x') return Infinity;
+	return +part;
+}
+
 function semverMax(first: string | undefined, rest: string[], num = 0): string {
 	if(!first) return semverMax(rest[0], rest, 1);
 
@@ -33,8 +40,8 @@ function semverMax(first: string | undefined, rest: string[], num = 0): string {
 		let partNum = 0;
 
 		while(partNum < partCount) {
-			const part = result[partNum].replace(/^[ <=>~^]+ */, '');
-			const otherPart = other[partNum++].replace(/^[ <=>~^]+ */, '');
+			const part = parserSemverPart(result[partNum]);
+			const otherPart = parserSemverPart(other[partNum++]);
 
 			if(otherPart > part) result = other;
 			if(otherPart < part) break;
