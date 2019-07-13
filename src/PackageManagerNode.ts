@@ -1,7 +1,7 @@
 import { URL, skipSlashes } from './URL';
 import { Package } from './Package';
 import { PackageManager, RepoKind } from './PackageManager';
-import { features } from './platform';
+import { features, keys } from './platform';
 
 export const nodeModules = '/node_modules/';
 
@@ -136,9 +136,7 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	} else if(typeof browser == 'object') {
 		// Use browser equivalents of packages and files.
 
-		for(let key in browser) {
-			if(!browser.hasOwnProperty(key)) continue;
-
+		for(let key of keys(browser)) {
 			const src = URL.resolve(rootKey + '/', key);
 			const dst = browser[key] || '@empty';
 

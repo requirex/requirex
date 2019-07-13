@@ -61,10 +61,6 @@ const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
 
 const reBlock = new RegExp('^' + reComments + '\\{');
 
-const reLabel = new RegExp(':' + reComments + '$');
-
-const reDot = new RegExp('^' + reComments + '\\.');
-
 /** Match an else statement after an if block. */
 const reElse = new RegExp(reComments + 'else' + reComments + '(if|\\{)');
 
