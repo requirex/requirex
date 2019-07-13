@@ -152,11 +152,13 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 		}
 	}
 
-	for(let dep of Object.keys(json.dependencies || {})) {
-		const depMeta = manager.registerMeta(dep);
-		const versionList = json.dependencies[dep].split(/ *\|\| *| +(- +)?/);
+	for(let depTbl of [json.dependencies, json.peerDependencies]) {
+		for(let dep of Object.keys(depTbl || {})) {
+			const depMeta = manager.registerMeta(dep);
+			const versionList = depTbl[dep].split(/ *\|\| *| +(- +)?/);
 
-		depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
+			depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
+		}
 	}
 
 	return pkg;
