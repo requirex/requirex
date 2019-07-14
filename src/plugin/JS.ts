@@ -608,6 +608,8 @@ export class JS implements LoaderPlugin {
 	discover(record: Record) {
 		let text = record.sourceCode;
 
+		if(!text) return;
+
 		// Check for a hashbang header line.
 		const match = reHashBang.exec(text);
 
@@ -649,6 +651,12 @@ export class JS implements LoaderPlugin {
 
 		// Call imported module.
 		compiled.apply(null, record.argValues);
+	}
+
+	wrap(record: Record) {
+		record.setArgs(record.globalTbl);
+
+		return record.wrap();
 	}
 
 }
