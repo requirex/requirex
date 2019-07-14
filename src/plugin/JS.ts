@@ -62,9 +62,73 @@ const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
 const reBlock = new RegExp('^' + reComments + '\\{');
 
 /** Match an else statement after an if block. */
-const reElse = new RegExp(reComments + 'else' + reComments + '(if|\\{)');
+const reElse = new RegExp('^' + reComments + 'else' + reComments + '(if|\\{)');
 
-interface TranslateState {
+const enum ConditionMode {
+	/** Not inside any interesting "if" statements. */
+	NONE = 0,
+	/** Inside the conditions of an "if" statement. */
+	CONDITION,
+	/** Inside "if" statement conditions, NODE_ENV constant seen. */
+	STATIC_CONDITION,
+	/** Inside a conditionally compiled block to be left in place. */
+	ALIVE_BLOCK,
+	/** Inside a conditionally compiled block to eliminate. */
+	DEAD_BLOCK
+}
+
+class StackItem {
+
+	constructor() {
+		this.clear();
+	}
+
+	clear() {
+		this.mode = ConditionMode.NONE;
+		// this.conditionDepth = -1;
+		this.conditionStart = 0;
+		this.wasAlive = false;
+
+		return this;
+	}
+
+	rootToken: string;
+
+	tracking?: boolean;
+	start?: number;
+	end?: number;
+
+	mode: ConditionMode;
+	// conditionDepth: number;
+	/** Start offset of "if" statement condition. */
+	conditionStart: number;
+	/** Flag whether any block seen so far in a set of conditionally
+	 * compiled if-else statements was not eliminated. */
+	wasAlive: boolean;
+
+	/** Inside a bundle, to be ignored in parsing. */
+	isDead: boolean;
+
+}
+
+class StateStack {
+
+	get(depth: number) {
+		return this.items[depth] || (this.items[depth] = new StackItem());
+	}
+
+	/** Track start and end offsets of parens and braces,
+	  * call handler when they end. */
+
+	track(depth: number) {
+		this.get(depth + 1).tracking = true;
+	}
+
+	items: StackItem[] = [ new StackItem() ];
+
+}
+
+interface TranslateConfig {
 
 	/** String of code to parse. */
 	text: string;
@@ -72,14 +136,10 @@ interface TranslateState {
 	/** Import record for code to translate. */
 	record: Record;
 
-	/** Nesting depth inside curly brace delimited blocks. */
-	depth: number;
-	captureDepth?: number;
-	captureStart?: number;
-	captureEnd?: number;
+	stack: StateStack;
 
-	last?: number;
-	pos?: number;
+	/** Like Array.splice arguments: start, length, replacement. */
+	patches: [number, number, string][];
 
 }
 
@@ -127,17 +187,26 @@ function skipRegExp(text: string, pos: number) {
 
 function parseSyntax(
 	reToken: RegExp,
-	state: TranslateState,
-	handler: (token: string, state: TranslateState, before?: string, after?: string) => void
+	config: TranslateConfig,
+	handler: (
+		token: string,
+		depth: number,
+		pos: number,
+		last: number,
+		before?: string,
+		after?: string
+	) => void
 ) {
 	const err = 'Parse error';
-	const text = state.text;
-	let depth = state.depth;
+	const text = config.text;
+	/** Nesting depth inside curly brace delimited blocks. */
+	let depth = 0;
+	let state: StackItem;
 	let match: RegExpExecArray | null;
 	/** Latest matched token. */
 	let token: string;
 	let last: number;
-	let pos: number;
+	let pos = 0;
 	let before: string;
 	let after: string;
 
@@ -149,20 +218,32 @@ function parseSyntax(
 		switch(token) {
 			case '(': case '{': case '[':
 
-				if(++depth == state.captureDepth) {
-					state.captureStart = last;
+				const parent = config.stack.items[depth];
+				state = config.stack.get(++depth).clear();
+				state.rootToken = token;
+				state.isDead = parent.isDead || parent.mode == ConditionMode.DEAD_BLOCK;
+				// state.conditionDepth = parent.conditionDepth;
+
+				if(state.tracking) {
+					state.start = last;
 				}
 				continue;
 
 			case ')': case '}': case ']':
 
-				if(depth-- == state.captureDepth) {
-					state.captureEnd = last + 1;
-					state.captureDepth = -1;
-					state.depth = depth;
-					state.last = last;
-					handler(token, state);
+				state = config.stack.get(depth);
+
+				if(state.tracking) {
+					state.end = last + 1;
+					state.tracking = false;
+
+					const parent = config.stack.items[depth - 1];
+					// Ensure } token terminating a dead block still gets parsed.
+					state.isDead = parent.isDead;
+					handler(token, depth, pos, last);
 				}
+
+				--depth;
 				continue;
 
 			case '//':
@@ -201,7 +282,7 @@ function parseSyntax(
 
 			case '`':
 
-				handler(token, state);
+				handler(token, depth, pos, last);
 
 			case '"': case "'":
 
@@ -238,10 +319,7 @@ function parseSyntax(
 					(sepBefore[before] || !last) &&
 					(sepAfter[after] || pos >= text.length)
 				) {
-					state.depth = depth;
-					state.last = last;
-					state.pos = pos;
-					handler(token, state, before, after);
+					handler(token, depth, pos, last, before, after);
 				}
 
 				continue;
@@ -281,34 +359,40 @@ const formatTbl: {
   * @param token Keyword to analyze.
   * @return True if module format was detected, false otherwise. */
 
-function guessFormat(token: string, state: TranslateState) {
+function guessFormat(
+	token: string,
+	config: TranslateConfig,
+	depth: number,
+	pos: number,
+	last: number
+) {
 	const format = formatTbl[token];
+	const record = config.record;
 
-	if(format && !state.record.formatBlacklist[format[0]]) {
-		const text = state.text;
-		const last = state.last!;
+	if(format && !record.formatBlacklist[format[0]]) {
+		const text = config.text;
 		const len = Math.min(last, chunkSize);
 
 		// Get some input immediately before and after the token,
 		// for quickly testing regexp matches.
-		const chunkAfter = text.substr(state.pos!, chunkSize);
+		const chunkAfter = text.substr(pos, chunkSize);
 
 		if(format[3] && format[3]!.test(text.substr(last - len, len))) {
 			// Redefining the module syntax makes known usage patterns unlikely.
-			state.record.formatBlacklist[format[0]] = true;
+			record.formatBlacklist[format[0]] = true;
 			return false;
 		}
 
 		if(format[2].test(chunkAfter)) {
-			state.record.format = format[0];
+			record.format = format[0];
 			return format[1];
 		}
 	}
 
-	if((token == 'import' || token == 'export') && !state.depth) {
+	if((token == 'import' || token == 'export') && !depth) {
 		// ES modules contain import and export statements
 		// at the root level scope.
-		state.record.format = 'ts';
+		record.format = 'ts';
 		return true;
 	}
 
@@ -346,93 +430,93 @@ export class JS implements LoaderPlugin {
 			if(!formatKnown) record.format = 'cjs';
 		}
 
-		const state: TranslateState = {
+		const config: TranslateConfig = {
 			text,
 			record,
-			depth: 0,
-			captureDepth: -1
+			stack: new StateStack(),
+			patches: []
 		};
 
-		const enum ConditionMode {
-			/** Not inside any interesting "if" statements. */
-			NONE = 0,
-			/** Inside the conditions of an "if" statement. */
-			CONDITION,
-			/** Inside "if" statement conditions, NODE_ENV constant seen. */
-			STATIC_CONDITION,
-			/** Inside a conditionally compiled block to be left in place. */
-			ALIVE_BLOCK,
-			/** Inside a conditionally compiled block to eliminate. */
-			DEAD_BLOCK,
-			/** Inside a bundle, to be ignored in parsing. */
-			BUILT
-		}
+		function handler(
+			token: string,
+			depth: number,
+			pos: number,
+			last: number,
+			before?: string,
+			after?: string
+		) {
+			const stack = config.stack;
+			const state = stack.get(depth);
 
-		let mode = ConditionMode.NONE;
-		/** Start offset of "if" statement condition. */
-		let conditionStart = 0;
-		/** Flag whether any block seen so far in a set of conditionally
-		  * compiled if-else statements was not eliminated. */
-		let wasAlive = false;
+			if(state.isDead) return;
 
-		const patches: [number, number, number, number][] = [];
+			if(token == 'NODE_ENV') {
+				let conditionDepth = depth;
 
-		parseSyntax(reToken, state, (token: string, state: TranslateState, before?: string, after?: string) => {
-			if(token == 'NODE_ENV' && mode == ConditionMode.CONDITION) {
-				mode = ConditionMode.STATIC_CONDITION;
+				while(conditionDepth--) {
+					const up = stack.items[conditionDepth];
+
+					if(up.rootToken != '(') {
+						if(up.mode == ConditionMode.CONDITION) {
+							up.mode = ConditionMode.STATIC_CONDITION;
+						}
+
+						break;
+					}
+				}
 			}
-
-			// Detect "if" statements not nested inside conditionally compiled blocks
-			// (which is still unsupported, would need a state stack here).
 
 			if(before == '.') return;
 
-			if(token == 'System' && state.captureDepth! < 0 && reBuilt.test(text.substr(state.pos!, chunkSize))) {
+			if(token == 'System' && reBuilt.test(text.substr(pos, chunkSize))) {
 				// Avoid re-processing bundled code.
-				mode = ConditionMode.BUILT;
-				state.captureDepth = state.depth + 1;
+				state.isDead = true;
 			}
 
-			if(token == 'if' && state.captureDepth! < 0) {
-				conditionStart = state.last!;
+			if(token == 'if') {
+				state.conditionStart = last;
 
-				if(mode == ConditionMode.NONE) {
-					wasAlive = false;
+				if(state.mode == ConditionMode.NONE) {
+					state.wasAlive = false;
 				}
 
-				mode = ConditionMode.CONDITION;
-				// Capture the "if" statement conditions.
-				state.captureDepth = state.depth + 1;
+				state.mode = ConditionMode.CONDITION;
+				// Track "if" statement conditions.
+				stack.track(depth);
 			}
 
-			// Handle end of captured "if" statement conditions (closing paren
-			// tokens are only emitted when nesting depth matches captureDepth,
-			// only set when parsing "if" statements).
+			const patches = config.patches;
+			const parent = depth && stack.items[depth - 1];
 
-			if(token == ')') {
+			// Handle end of "if" statement conditions (this token is only
+			// emitted when tracking is turned on).
+
+			if(token == ')' && parent) {
 				// Ensure a NODE_ENV constant was seen and a block delimited
 				// by curly braces follows (parsing individual expressions
 				// is still unsupported).
 
 				if(
-					mode == ConditionMode.STATIC_CONDITION &&
-					reBlock.test(text.substr(state.captureEnd!, chunkSize))
+					parent.mode == ConditionMode.STATIC_CONDITION &&
+					reBlock.test(text.substr(state.end!, chunkSize))
 				) {
-					if(wasAlive) {
+					if(parent.wasAlive) {
 						// If a previous block among the if-else statements
 						// was not eliminated, all following "else" blocks
 						// must be.
 
-						mode = ConditionMode.DEAD_BLOCK;
-						state.captureDepth = state.depth + 1;
+						parent.mode = ConditionMode.DEAD_BLOCK;
+						patches.push([state.start! + 1, state.end! - 1, '0']);
+
+						stack.track(depth - 1);
 					} else {
 						// Stop conditional compilation if an error occurs.
-						mode = ConditionMode.NONE;
+						parent.mode = ConditionMode.NONE;
 
 						/** Condition extracted from latest "if" statement. */
 						const condition = text.substr(
-							state.captureStart!,
-							state.captureEnd! - state.captureStart!
+							state.start!,
+							state.end! - state.start!
 						);
 
 						// Ensure the condition clearly has no side effects
@@ -441,82 +525,69 @@ export class JS implements LoaderPlugin {
 						if(!reCallAssign.test(condition)) try {
 							// Prepare to handle an alive or dead block based
 							// on the conditions.
-							mode = (0, eval)(
+							const alive = +!!((0, eval)(
 								'(function(process){return' + condition + '})'
-							)(record.globalTbl.process) ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
+							)(record.globalTbl.process));
 
-							// If no errors were thrown, capture the following
+							parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
+							patches.push([state.start! + 1, state.end! - 1, '' + alive]);
+
+							// If no errors were thrown, find the following
 							// curly brace delimited block.
-							state.captureDepth = state.depth + 1;
+							stack.track(depth - 1);
 						} catch(err) { }
 					}
 				} else {
-					mode = ConditionMode.NONE;
+					parent.mode = ConditionMode.NONE;
 				}
 			}
 
-			// Handle a just captured, conditionally compiled curly brace
+			// Handle a just parsed, conditionally compiled curly brace
 			// delimited block.
 
-			if(token == '}' && mode != ConditionMode.NONE) {
-				const alive = mode == ConditionMode.ALIVE_BLOCK;
-				wasAlive = wasAlive || alive;
-
-				let patchStart = state.captureStart! + 1;
-				const patchEnd = state.captureEnd! - 1;
+			if(token == '}' && parent && parent.mode != ConditionMode.NONE) {
+				const alive = parent.mode == ConditionMode.ALIVE_BLOCK;
+				parent.wasAlive = parent.wasAlive || alive;
 
 				if(alive) {
 					// Set mode for next block in case of an "else" statement.
-					mode = ConditionMode.DEAD_BLOCK;
+					parent.mode = ConditionMode.DEAD_BLOCK;
 				} else {
+					// Remove dead code.
+					patches.push([state.start! + 1, state.end! - 1, '']);
 					// Prepare for an "else" statement.
-					if(!wasAlive) mode = ConditionMode.ALIVE_BLOCK;
-					// Set start = end to clear block contents.
-					patchStart = patchEnd;
+					if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
 				}
-
-				// Patch the code to match conditions.
-				patches.push([
-					// Beginning of latest "if" or "else" statement.
-					conditionStart,
-					// Replace with if(0) or if(1).
-					+alive,
-					patchStart,
-					patchEnd
-				]);
 
 				/** Match a following "else" statement followed by an "if" or
 				  * curly brace delimited block. */
-				const elseMatch = text.substr(state.captureEnd!, chunkSize).match(reElse);
+				const elseMatch = text.substr(state.end!, chunkSize).match(reElse);
 
 				if(elseMatch) {
-					conditionStart = state.captureEnd! + elseMatch[0].length - 1;
-					state.captureDepth = state.depth + 1;
+					parent.conditionStart = state.end! + elseMatch[0].length - 1;
+					stack.track(depth - 1);
 				} else {
-					mode = ConditionMode.NONE;
+					parent.mode = ConditionMode.NONE;
 				}
 			}
-
-			// Disregard eliminated code in module format and dependency detection.
-			if(mode == ConditionMode.DEAD_BLOCK || mode == ConditionMode.BUILT) return;
 
 			if(
 				!features.isES6 &&
 				(token == '`' || token == 'let' || token == 'const' || token == '=>')
 			) {
-				state.record.format = 'ts';
+				record.format = 'ts';
 				formatKnown = true;
 			}
 
 			if(!formatKnown) {
-				formatKnown = guessFormat(token, state);
+				formatKnown = guessFormat(token, config, depth, pos, last);
 			}
 
 			if(
 				token == requireToken &&
-				(state.record.format == 'amd' || state.record.format == 'cjs')
+				(record.format == 'amd' || record.format == 'cjs')
 			) {
-				const chunkAfter = text.substr(state.pos!, chunkSize);
+				const chunkAfter = text.substr(pos, chunkSize);
 
 				match = reCallString.exec(chunkAfter);
 
@@ -525,29 +596,23 @@ export class JS implements LoaderPlugin {
 					record.addDep(match[2]);
 				}
 			}
-		});
+		}
+
+		parseSyntax(reToken, config, handler);
 
 		// Apply patches from conditional compilation.
 
-		if(patches.length) {
+		if(config.patches.length) {
 			let result = '';
 			let pos = 0;
 
-			for(let patch of patches) {
-				result += (
-					text.substr(pos, patch[0] - pos) +
-					'if(' + patch[1] + ') {' +
-					text.substr(patch[2], patch[3] - patch[2]) +
-					'}'
-				);
-
-				pos = patch[3] + 1;
+			for(let [start, end, replacement] of config.patches) {
+				result += text.substr(pos, start - pos) + replacement;
+				pos = end;
 			}
 
-			text = result + text.substr(pos);
+			record.sourceCode = result + text.substr(pos);
 		}
-
-		record.sourceCode = text;
 	}
 
 	/** Run code with no module format, for example a requirex bundle. */
