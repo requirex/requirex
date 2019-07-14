@@ -1,17 +1,13 @@
 import { Record, ModuleFormat } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
-import { features, globalEval } from '../platform';
+import { features, makeTable, globalEval } from '../platform';
 
 const chunkSize = 128;
 
 /** Table of characters that may surround keyword and identifier names. */
-const sepBefore: { [char: string]: boolean } = {};
-const sepAfter: { [char: string]: boolean } = {};
-
-for(let c of '\t\n\r !"#%&\'()*+,-./;<=>?@[\\]^`{|}~'.split('')) {
-	sepBefore[c] = true;
-	sepAfter[c] = true;
-}
+const sepList = '\t\n\r !"#%&\'()*+,-./;<=>?@[\\]^`{|}~';
+const sepBefore = makeTable(sepList, '');
+const sepAfter = makeTable(sepList, '');
 
 sepBefore[':'] = true;
 
@@ -46,18 +42,21 @@ const reModuleExports = /^\s*(\[\s*["'`]exports["'`]\s*\]|\.\s*exports)\s*(\[["'
 /** Match access to members of exports using dot or array notation. */
 const reExports = /^\s*(\[["'`]|\.)/;
 
-/** Match a non-identifier, non-numeric character or return statement before a regular expression.
+/** Match any number of comments and whitespace. */
+const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
+
+/** Match a non-identifier, non-numeric character or return statement
+  * before a regular expression or JSX element.
   * Example code seen in the wild: function(t){return/[A-Z]+/g.test(t)} */
-const reBeforeRegExp = /(^|[!%&(*+,-/:;<=>?\[^{|}~])\s*(return\s*)?$/;
+const reBeforeLiteral = new RegExp(
+	'(^|[-!%&(*+,:;<=>?\\[^{|}~]|[^*/]/)' + reComments + '(return\\s*)?$'
+);
 
 /** Match a hashbang header line used to make JS files executable in *nix systems. */
 const reHashBang = /^\ufeff?#![^\r\n]*/;
 
 /** Match any potential function call or assignment, including suspicious comments before parens. */
-const reCallAssign = /(\*\/|[^\t\n\r !"#%&'(*+,-./:;<=>?@[\\^`{|~])\s*\(|[^!=]=[^=]|\+\+|--/;
-
-/** Match any number of comments and whitespace. */
-const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
+const reCallAssign = /(\*\/|[^-\t\n\r !"#%&'(*+,./:;<=>?@[\\^`{|~])\s*\(|[^!=]=[^=]|\+\+|--/;
 
 const reBlock = new RegExp('^' + reComments + '\\{');
 
@@ -263,7 +262,7 @@ function parseSyntax(parser: TranslateConfig) {
 				// Test if the slash begins a regular expression.
 				pos = Math.max(last - chunkSize, 0);
 
-				if(!reBeforeRegExp.test(text.substr(pos, last - pos))) {
+				if(!reBeforeLiteral.test(text.substr(pos, last - pos))) {
 					continue;
 				}
 
