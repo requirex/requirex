@@ -8,6 +8,8 @@ const sepList = '\t\n\r !"#%&\'()*+,-./;<=>?@[\\]^`{|}~';
 const sepBefore = makeTable(sepList, '');
 const sepAfter = makeTable(sepList, '');
 
+// Keywords may occur after a label or field name, not before.
+// So a separating : must come before them, not after.
 sepBefore[':'] = true;
 
 /** Create a regexp for matching string or comment start tokens,
@@ -25,6 +27,7 @@ const reCallLiteral = /^\s*\(\s*["'`\[{_$A-Za-z]/;
 // TODO: What types are valid for the first argument to System.register?
 const reRegister = /^\s*\.\s*register\s*\(\s*["'`\[]/;
 
+/** Match a ".built(...)" method call (used after a "System" token). */
 const reBuilt = /^\s*\.\s*built\s*\(\s*1\s*,/;
 
 /** Match a function call with a string argument.
@@ -80,7 +83,6 @@ class StackItem {
 
 	clear() {
 		this.mode = ConditionMode.NONE;
-		// this.conditionDepth = -1;
 		this.conditionStart = 0;
 		this.wasAlive = false;
 
@@ -94,14 +96,16 @@ class StackItem {
 	end?: number;
 
 	mode: ConditionMode;
-	// conditionDepth: number;
+
 	/** Start offset of "if" statement condition. */
 	conditionStart: number;
+
 	/** Flag whether any block seen so far in a set of conditionally
-	 * compiled if-else statements was not eliminated. */
+	  * compiled if-else statements was not eliminated. */
 	wasAlive: boolean;
 
-	/** Inside a bundle, to be ignored in parsing. */
+	/** Inside an always false condition or bundled code,
+	  * to be ignored in parsing. */
 	isDead: boolean;
 
 }
@@ -176,9 +180,7 @@ function skipRegExp(text: string, pos: number) {
 			case '/':
 
 				// A slash terminates the regexp unless inside a character class.
-				if(!inClass) {
-					return pos;
-				}
+				if(!inClass) return pos;
 		}
 	}
 
@@ -568,7 +570,9 @@ export class Parser implements TranslateConfig {
 		return this;
 	}
 
-	/** Apply patches from conditional compilation. */
+	/** Apply patches from conditional compilation.
+	  *
+	  * @return patched string. */
 
 	applyPatches() {
 		const text = this.text;
@@ -597,7 +601,8 @@ export class Parser implements TranslateConfig {
 
 	stack = new StateStack();
 
-	/** Like Array.splice arguments: start, length, replacement. */
+	/** String replacements to apply to input source code, similar to array.splice.
+	  * Format is: start, end, replacement. */
 	patches: [number, number, string][] = [];
 
 }
