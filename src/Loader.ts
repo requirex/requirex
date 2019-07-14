@@ -553,7 +553,8 @@ export class Loader implements LoaderPlugin {
 		let num = 0;
 
 		for(let pkgSpec of specList) {
-			const pkg = new Package(pkgSpec.name, pkgSpec.root);
+			const root = pkgSpec.root && URL.resolve(this.baseURL || this.firstParent || '', pkgSpec.root);
+			const pkg = new Package(pkgSpec.name, root);
 			pkg.version = pkgSpec.version;
 			pkg.main = pkgSpec.main;
 			pkg.map = pkgSpec.map;
