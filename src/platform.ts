@@ -83,10 +83,15 @@ export function assign(
 	return(dst);
 }
 
-export function makeTable(items: string) {
+/** Split input string into keys and create a table mapping each key to true.
+  *
+  * @param sep Optional separator to use in splitting, default is space.
+  * An empty separator uses each character in the input string as a key. */
+
+export function makeTable(items: string, sep = ' ') {
 	const result: { [key: string]: boolean } = {};
 
-	for(let key of items.split(' ')) {
+	for(let key of items.split(sep)) {
 		result[key] = true;
 	}
 
