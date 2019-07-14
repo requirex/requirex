@@ -124,22 +124,27 @@ class StateStack {
 		this.get(depth + 1).tracking = true;
 	}
 
-	items: StackItem[] = [ new StackItem() ];
+	items: StackItem[] = [new StackItem()];
 
 }
 
 interface TranslateConfig {
 
+	handler(
+		token: string,
+		depth: number,
+		pos: number,
+		last: number,
+		before?: string,
+		after?: string
+	): void;
+
+	reToken: RegExp;
+
 	/** String of code to parse. */
 	text: string;
 
-	/** Import record for code to translate. */
-	record: Record;
-
 	stack: StateStack;
-
-	/** Like Array.splice arguments: start, length, replacement. */
-	patches: [number, number, string][];
 
 }
 
@@ -185,20 +190,11 @@ function skipRegExp(text: string, pos: number) {
 	return -1;
 }
 
-function parseSyntax(
-	reToken: RegExp,
-	config: TranslateConfig,
-	handler: (
-		token: string,
-		depth: number,
-		pos: number,
-		last: number,
-		before?: string,
-		after?: string
-	) => void
-) {
+function parseSyntax(parser: TranslateConfig) {
 	const err = 'Parse error';
-	const text = config.text;
+	const reToken = parser.reToken;
+	const stack = parser.stack;
+	const text = parser.text;
 	/** Nesting depth inside curly brace delimited blocks. */
 	let depth = 0;
 	let state: StackItem;
@@ -218,8 +214,8 @@ function parseSyntax(
 		switch(token) {
 			case '(': case '{': case '[':
 
-				const parent = config.stack.items[depth];
-				state = config.stack.get(++depth).clear();
+				const parent = stack.items[depth];
+				state = stack.get(++depth).clear();
 				state.rootToken = token;
 				state.isDead = parent.isDead || parent.mode == ConditionMode.DEAD_BLOCK;
 				// state.conditionDepth = parent.conditionDepth;
@@ -231,16 +227,16 @@ function parseSyntax(
 
 			case ')': case '}': case ']':
 
-				state = config.stack.get(depth);
+				state = stack.get(depth);
 
 				if(state.tracking) {
 					state.end = last + 1;
 					state.tracking = false;
 
-					const parent = config.stack.items[depth - 1];
+					const parent = stack.items[depth - 1];
 					// Ensure } token terminating a dead block still gets parsed.
 					state.isDead = parent.isDead;
-					handler(token, depth, pos, last);
+					parser.handler(token, depth, pos, last);
 				}
 
 				--depth;
@@ -282,7 +278,7 @@ function parseSyntax(
 
 			case '`':
 
-				handler(token, depth, pos, last);
+				parser.handler(token, depth, pos, last);
 
 			case '"': case "'":
 
@@ -319,7 +315,7 @@ function parseSyntax(
 					(sepBefore[before] || !last) &&
 					(sepAfter[after] || pos >= text.length)
 				) {
-					handler(token, depth, pos, last, before, after);
+					parser.handler(token, depth, pos, last, before, after);
 				}
 
 				continue;
@@ -354,72 +350,267 @@ const formatTbl: {
 	'exports': ['cjs', true, reExports, null]
 });
 
-/** Check if keyword presence indicates a specific module format.
-  *
-  * @param token Keyword to analyze.
-  * @return True if module format was detected, false otherwise. */
+/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
+  * Optimized for speed. */
 
-function guessFormat(
-	token: string,
-	config: TranslateConfig,
-	depth: number,
-	pos: number,
-	last: number
-) {
-	const format = formatTbl[token];
-	const record = config.record;
+class Parser implements TranslateConfig {
 
-	if(format && !record.formatBlacklist[format[0]]) {
-		const text = config.text;
-		const len = Math.min(last, chunkSize);
+	constructor(
+		/** String of code to parse. */
+		public text: string,
+		/** Import record for code to translate. */
+		public record: Record
+	) {}
 
-		// Get some input immediately before and after the token,
-		// for quickly testing regexp matches.
-		const chunkAfter = text.substr(pos, chunkSize);
+	/** Check if keyword presence indicates a specific module format.
+	 *
+	 * @param token Keyword to analyze.
+	 * @return True if module format was detected, false otherwise. */
 
-		if(format[3] && format[3]!.test(text.substr(last - len, len))) {
-			// Redefining the module syntax makes known usage patterns unlikely.
-			record.formatBlacklist[format[0]] = true;
-			return false;
+	guessFormat(
+		token: string,
+		depth: number,
+		pos: number,
+		last: number
+	) {
+		const format = formatTbl[token];
+		const record = this.record;
+
+		if(format && !record.formatBlacklist[format[0]]) {
+			const text = this.text;
+			const len = Math.min(last, chunkSize);
+
+			// Get some input immediately before and after the token,
+			// for quickly testing regexp matches.
+			const chunkAfter = text.substr(pos, chunkSize);
+
+			if(format[3] && format[3]!.test(text.substr(last - len, len))) {
+				// Redefining the module syntax makes known usage patterns unlikely.
+				record.formatBlacklist[format[0]] = true;
+				return false;
+			}
+
+			if(format[2].test(chunkAfter)) {
+				record.format = format[0];
+				return format[1];
+			}
 		}
 
-		if(format[2].test(chunkAfter)) {
-			record.format = format[0];
-			return format[1];
+		if((token == 'import' || token == 'export') && !depth) {
+			// ES modules contain import and export statements
+			// at the root level scope.
+			record.format = 'ts';
+			return true;
+		}
+
+		return false;
+	}
+
+	handler(
+		token: string,
+		depth: number,
+		pos: number,
+		last: number,
+		before?: string,
+		after?: string
+	) {
+		const text = this.text;
+		const stack = this.stack;
+		const state = stack.get(depth);
+
+		if(state.isDead) return;
+
+		if(token == 'NODE_ENV') {
+			let conditionDepth = depth;
+
+			while(conditionDepth--) {
+				const up = stack.items[conditionDepth];
+
+				if(up.rootToken != '(') {
+					if(up.mode == ConditionMode.CONDITION) {
+						up.mode = ConditionMode.STATIC_CONDITION;
+					}
+
+					break;
+				}
+			}
+		}
+
+		if(before == '.') return;
+
+		if(token == 'System' && reBuilt.test(text.substr(pos, chunkSize))) {
+			// Avoid re-processing bundled code.
+			state.isDead = true;
+		}
+
+		if(token == 'if') {
+			state.conditionStart = last;
+
+			if(state.mode == ConditionMode.NONE) {
+				state.wasAlive = false;
+			}
+
+			state.mode = ConditionMode.CONDITION;
+			// Track "if" statement conditions.
+			stack.track(depth);
+		}
+
+		const record = this.record;
+		const patches = this.patches;
+		const parent = depth && stack.items[depth - 1];
+
+		// Handle end of "if" statement conditions (this token is only
+		// emitted when tracking is turned on).
+
+		if(token == ')' && parent) {
+			// Ensure a NODE_ENV constant was seen and a block delimited
+			// by curly braces follows (parsing individual expressions
+			// is still unsupported).
+
+			if(
+				parent.mode == ConditionMode.STATIC_CONDITION &&
+				reBlock.test(text.substr(state.end!, chunkSize))
+			) {
+				if(parent.wasAlive) {
+					// If a previous block among the if-else statements
+					// was not eliminated, all following "else" blocks
+					// must be.
+
+					parent.mode = ConditionMode.DEAD_BLOCK;
+					patches.push([state.start! + 1, state.end! - 1, '0']);
+
+					stack.track(depth - 1);
+				} else {
+					// Stop conditional compilation if an error occurs.
+					parent.mode = ConditionMode.NONE;
+
+					/** Condition extracted from latest "if" statement. */
+					const condition = text.substr(
+						state.start!,
+						state.end! - state.start!
+					);
+
+					// Ensure the condition clearly has no side effects
+					// and try to evaluate it.
+
+					if(!reCallAssign.test(condition)) try {
+						// Prepare to handle an alive or dead block based
+						// on the conditions.
+						const alive = +!!((0, eval)(
+							'(function(process){return' + condition + '})'
+						)(record.globalTbl.process));
+
+						parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
+						patches.push([state.start! + 1, state.end! - 1, '' + alive]);
+
+						// If no errors were thrown, find the following
+						// curly brace delimited block.
+						stack.track(depth - 1);
+					} catch(err) { }
+				}
+			} else {
+				parent.mode = ConditionMode.NONE;
+			}
+		}
+
+		// Handle a just parsed, conditionally compiled curly brace
+		// delimited block.
+
+		if(token == '}' && parent && parent.mode != ConditionMode.NONE) {
+			const alive = parent.mode == ConditionMode.ALIVE_BLOCK;
+			parent.wasAlive = parent.wasAlive || alive;
+
+			if(alive) {
+				// Set mode for next block in case of an "else" statement.
+				parent.mode = ConditionMode.DEAD_BLOCK;
+			} else {
+				// Remove dead code.
+				patches.push([state.start! + 1, state.end! - 1, '']);
+				// Prepare for an "else" statement.
+				if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
+			}
+
+			/** Match a following "else" statement followed by an "if" or
+			  * curly brace delimited block. */
+			const elseMatch = text.substr(state.end!, chunkSize).match(reElse);
+
+			if(elseMatch) {
+				parent.conditionStart = state.end! + elseMatch[0].length - 1;
+				stack.track(depth - 1);
+			} else {
+				parent.mode = ConditionMode.NONE;
+			}
+		}
+
+		if(
+			!features.isES6 &&
+			(token == '`' || token == 'let' || token == 'const' || token == '=>')
+		) {
+			record.format = 'ts';
+			this.formatKnown = true;
+		}
+
+		if(!this.formatKnown) {
+			this.formatKnown = this.guessFormat(token, depth, pos, last);
+		}
+
+		if(
+			token == this.requireToken &&
+			(record.format == 'amd' || record.format == 'cjs')
+		) {
+			const chunkAfter = text.substr(pos, chunkSize);
+			const match = reCallString.exec(chunkAfter);
+
+			if(match && match[1] == match[3]) {
+				// Called with a string surrounded in matching quotations.
+				record.addDep(match[2]);
+			}
 		}
 	}
 
-	if((token == 'import' || token == 'export') && !depth) {
-		// ES modules contain import and export statements
-		// at the root level scope.
-		record.format = 'ts';
-		return true;
+	/** Apply patches from conditional compilation. */
+
+	applyPatches() {
+		const text = this.text;
+
+		if(!this.patches.length) return text;
+
+		let result = '';
+		let pos = 0;
+
+		for(let [start, end, replacement] of this.patches) {
+			result += text.substr(pos, start - pos) + replacement;
+			pos = end;
+		}
+
+		return result + text.substr(pos);
 	}
 
-	return false;
+	/** Finished trying to detect the module format? */
+	formatKnown: boolean;
+
+	/** Match string or comment start tokens, curly braces and some keywords. */
+	reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV|let|const|=>');
+
+	/** CommonJS style require call. Name can be remapped if used inside AMD. */
+	requireToken = 'require';
+
+	stack = new StateStack();
+
+	/** Like Array.splice arguments: start, length, replacement. */
+	patches: [number, number, string][] = [];
+
 }
 
 export class JS implements LoaderPlugin {
 
 	constructor(private loader: Loader) { }
 
-	/** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
-	  * Optimized for speed. */
-
 	discover(record: Record) {
-		/** Match string or comment start tokens, curly braces and some keywords. */
-		let reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV|let|const|=>');
-
-		/** Finished trying to detect the module format? */
-		let formatKnown = false;
-
-		/** CommonJS style require call. Name can be remapped if used inside AMD. */
-		let requireToken = 'require';
-
 		let text = record.sourceCode;
 
 		// Check for a hashbang header line.
-		let match = reHashBang.exec(text);
+		const match = reHashBang.exec(text);
 
 		if(match) {
 			// Remove the header.
@@ -427,192 +618,14 @@ export class JS implements LoaderPlugin {
 
 			// Anything meant to run as a script is probably CommonJS,
 			// but keep trying to detect module type anyway.
-			if(!formatKnown) record.format = 'cjs';
+			record.format = 'cjs';
 		}
 
-		const config: TranslateConfig = {
-			text,
-			record,
-			stack: new StateStack(),
-			patches: []
-		};
+		const parser = new Parser(text, record);
 
-		function handler(
-			token: string,
-			depth: number,
-			pos: number,
-			last: number,
-			before?: string,
-			after?: string
-		) {
-			const stack = config.stack;
-			const state = stack.get(depth);
+		parseSyntax(parser);
 
-			if(state.isDead) return;
-
-			if(token == 'NODE_ENV') {
-				let conditionDepth = depth;
-
-				while(conditionDepth--) {
-					const up = stack.items[conditionDepth];
-
-					if(up.rootToken != '(') {
-						if(up.mode == ConditionMode.CONDITION) {
-							up.mode = ConditionMode.STATIC_CONDITION;
-						}
-
-						break;
-					}
-				}
-			}
-
-			if(before == '.') return;
-
-			if(token == 'System' && reBuilt.test(text.substr(pos, chunkSize))) {
-				// Avoid re-processing bundled code.
-				state.isDead = true;
-			}
-
-			if(token == 'if') {
-				state.conditionStart = last;
-
-				if(state.mode == ConditionMode.NONE) {
-					state.wasAlive = false;
-				}
-
-				state.mode = ConditionMode.CONDITION;
-				// Track "if" statement conditions.
-				stack.track(depth);
-			}
-
-			const patches = config.patches;
-			const parent = depth && stack.items[depth - 1];
-
-			// Handle end of "if" statement conditions (this token is only
-			// emitted when tracking is turned on).
-
-			if(token == ')' && parent) {
-				// Ensure a NODE_ENV constant was seen and a block delimited
-				// by curly braces follows (parsing individual expressions
-				// is still unsupported).
-
-				if(
-					parent.mode == ConditionMode.STATIC_CONDITION &&
-					reBlock.test(text.substr(state.end!, chunkSize))
-				) {
-					if(parent.wasAlive) {
-						// If a previous block among the if-else statements
-						// was not eliminated, all following "else" blocks
-						// must be.
-
-						parent.mode = ConditionMode.DEAD_BLOCK;
-						patches.push([state.start! + 1, state.end! - 1, '0']);
-
-						stack.track(depth - 1);
-					} else {
-						// Stop conditional compilation if an error occurs.
-						parent.mode = ConditionMode.NONE;
-
-						/** Condition extracted from latest "if" statement. */
-						const condition = text.substr(
-							state.start!,
-							state.end! - state.start!
-						);
-
-						// Ensure the condition clearly has no side effects
-						// and try to evaluate it.
-
-						if(!reCallAssign.test(condition)) try {
-							// Prepare to handle an alive or dead block based
-							// on the conditions.
-							const alive = +!!((0, eval)(
-								'(function(process){return' + condition + '})'
-							)(record.globalTbl.process));
-
-							parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
-							patches.push([state.start! + 1, state.end! - 1, '' + alive]);
-
-							// If no errors were thrown, find the following
-							// curly brace delimited block.
-							stack.track(depth - 1);
-						} catch(err) { }
-					}
-				} else {
-					parent.mode = ConditionMode.NONE;
-				}
-			}
-
-			// Handle a just parsed, conditionally compiled curly brace
-			// delimited block.
-
-			if(token == '}' && parent && parent.mode != ConditionMode.NONE) {
-				const alive = parent.mode == ConditionMode.ALIVE_BLOCK;
-				parent.wasAlive = parent.wasAlive || alive;
-
-				if(alive) {
-					// Set mode for next block in case of an "else" statement.
-					parent.mode = ConditionMode.DEAD_BLOCK;
-				} else {
-					// Remove dead code.
-					patches.push([state.start! + 1, state.end! - 1, '']);
-					// Prepare for an "else" statement.
-					if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
-				}
-
-				/** Match a following "else" statement followed by an "if" or
-				  * curly brace delimited block. */
-				const elseMatch = text.substr(state.end!, chunkSize).match(reElse);
-
-				if(elseMatch) {
-					parent.conditionStart = state.end! + elseMatch[0].length - 1;
-					stack.track(depth - 1);
-				} else {
-					parent.mode = ConditionMode.NONE;
-				}
-			}
-
-			if(
-				!features.isES6 &&
-				(token == '`' || token == 'let' || token == 'const' || token == '=>')
-			) {
-				record.format = 'ts';
-				formatKnown = true;
-			}
-
-			if(!formatKnown) {
-				formatKnown = guessFormat(token, config, depth, pos, last);
-			}
-
-			if(
-				token == requireToken &&
-				(record.format == 'amd' || record.format == 'cjs')
-			) {
-				const chunkAfter = text.substr(pos, chunkSize);
-
-				match = reCallString.exec(chunkAfter);
-
-				if(match && match[1] == match[3]) {
-					// Called with a string surrounded in matching quotations.
-					record.addDep(match[2]);
-				}
-			}
-		}
-
-		parseSyntax(reToken, config, handler);
-
-		// Apply patches from conditional compilation.
-
-		if(config.patches.length) {
-			let result = '';
-			let pos = 0;
-
-			for(let [start, end, replacement] of config.patches) {
-				result += text.substr(pos, start - pos) + replacement;
-				pos = end;
-			}
-
-			record.sourceCode = result + text.substr(pos);
-		}
+		record.sourceCode = parser.applyPatches();
 	}
 
 	/** Run code with no module format, for example a requirex bundle. */
