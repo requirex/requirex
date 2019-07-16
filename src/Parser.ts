@@ -81,10 +81,14 @@ class StackItem {
 		this.clear();
 	}
 
-	clear() {
+	clear(parent?: StackItem) {
 		this.mode = ConditionMode.NONE;
 		this.conditionStart = 0;
 		this.wasAlive = false;
+
+		if(parent) {
+			this.isDead = parent.isDead || parent.mode == ConditionMode.DEAD_BLOCK;
+		}
 
 		return this;
 	}
@@ -211,15 +215,12 @@ function parseSyntax(parser: TranslateConfig) {
 		switch(token) {
 			case '(': case '{': case '[':
 
-				const parent = stack.items[depth];
-				state = stack.get(++depth).clear();
+				state = stack.get(depth + 1).clear(stack.items[depth]);
 				state.rootToken = token;
-				state.isDead = parent.isDead || parent.mode == ConditionMode.DEAD_BLOCK;
-				// state.conditionDepth = parent.conditionDepth;
 
-				if(state.tracking) {
-					state.start = last;
-				}
+				if(state.tracking) state.start = last;
+
+				++depth;
 				continue;
 
 			case ')': case '}': case ']':
@@ -230,9 +231,8 @@ function parseSyntax(parser: TranslateConfig) {
 					state.end = last + 1;
 					state.tracking = false;
 
-					const parent = stack.items[depth - 1];
 					// Ensure } token terminating a dead block still gets parsed.
-					state.isDead = parent.isDead;
+					state.isDead = stack.items[depth - 1].isDead;
 					parser.handler(token, depth, pos, last);
 				}
 
