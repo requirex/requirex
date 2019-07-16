@@ -1,2 +1,2 @@
-import './NodeResolve.test';
+import './PackageManager.test';
 import './JS.test';
