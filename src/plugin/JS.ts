@@ -42,7 +42,7 @@ export class JS implements LoaderPlugin {
 			System: this.loader
 		});
 
-		if(!compiled) {
+		if(!compiled && !record.eval) {
 			try {
 				// Compile module into a function under global scope.
 				compiled = globalEval(record.wrap(true));
@@ -53,7 +53,11 @@ export class JS implements LoaderPlugin {
 		}
 
 		// Call imported module.
-		compiled.apply(null, record.argValues);
+		if(record.eval) {
+			record.eval(record);
+		} else {
+			compiled.apply(null, record.argValues);
+		}
 	}
 
 	wrap(record: Record) {

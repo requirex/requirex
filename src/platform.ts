@@ -85,6 +85,27 @@ export function assign(
 	return(dst);
 }
 
+/** Assign all members from src to dst object and return their previous values.
+  * Assign them back to dst to restore it back to original
+  * (note: previously missing keys will not be deleted but set to undefined).
+  *
+  * @return Object with field names from src and values from dst
+  * before the assignment. */
+
+export function assignReversible(
+	dst: { [key: string]: any },
+	src: { [key: string]: any }
+) {
+	const orig: { [key: string]: any } = {};
+
+	for(let name of keys(src)) {
+		orig[name] = dst[name];
+		dst[name] = src[name];
+	}
+
+	return(orig);
+}
+
 /** Split input string into keys and create a table mapping each key to true.
   *
   * @param sep Optional separator to use in splitting, default is space.

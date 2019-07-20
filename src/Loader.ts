@@ -334,7 +334,9 @@ export class Loader implements LoaderPlugin {
 			ref.module = depModule;
 			if(!record) return emptyPromise;
 		} else if(!record) {
-			record = new Record(this, resolvedKey, importKey, ref.package)
+			record = new Record(this, resolvedKey, importKey, ref.package);
+			record.sourceKey = ref.sourceKey;
+			record.eval = ref.eval;
 			this.records[resolvedKey] = record;
 		}
 

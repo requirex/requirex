@@ -30,7 +30,9 @@ export interface DepRef {
 	record?: Record;
 	package?: Package;
 	format?: string;
+	sourceKey?: string;
 	sourceCode?: string;
+	eval?: (record: Record) => void;
 }
 
 export class Record {
@@ -106,17 +108,32 @@ export class Record {
 		this.argValues = argNames.map((name: string) => argTbl[name]);
 	}
 
-	wrap(debug?: boolean) {
-		return this.sourceCode && (
-			'(function(' + this.argNames.join(', ') + ') {\n' +
-			this.sourceCode +
-			(debug ?
-				'\n//# sourceURL=' + this.resolvedKey /*+ (sourceMap ? '!transpiled' : '')*/ :
-				''
-			) +
+	wrap(debug?: boolean, inline?: boolean) {
+		let code = this.sourceCode;
+		if(!code) return code;
+
+		let prologue = '';
+		let epilogue = '';
+
+		if(!inline) {
+			prologue = '(function(' + this.argNames.join(', ') + ') {\n';
 			// Break possible source map comment on the last line.
-			'\n})'
-		);
+			epilogue = '\n})';
+		}
+
+		if(debug) {
+			const strict = code.match(/^[ \t]*["'`]use strict["'`][ \t\r;]*\n/);
+
+			if(strict) {
+				// Always hoist strictness pragma to the top.
+				prologue = strict[0] + prologue;
+				code = code.substr(strict[0].length);
+			}
+
+			epilogue += '\n//# sourceURL=' + (this.sourceKey || this.resolvedKey);
+		}
+
+		return prologue + code + epilogue;
 	}
 
 	/** Autodetected or configured format of the module. */
@@ -157,6 +174,13 @@ export class Record {
 	/** Source code wrapped and compiled into an executable function. */
 	compiled: ModuleFactory;
 	factory: ModuleFactory;
+
+	/** Address to show in sourceURL comment. */
+	sourceKey?: string;
+
+	/** Optional custom evaluation function. For example HTML inline scripts
+	  * cannot use default eval() because they need a shared scope. */
+	eval?: (record: Record) => void;
 
 	argTbl: { [name: string]: any } = {};
 	argNames: string[] = [];

@@ -1,7 +1,7 @@
 import { URL } from '../URL';
-import { Record } from '../Record';
+import { Record, DepRef } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
-import { origin, getTags } from '../platform';
+import { origin, getTags, globalEnv, assign, assignReversible } from '../platform';
 
 /** Document element loader plugin. */
 
@@ -13,7 +13,7 @@ export class Document implements LoaderPlugin {
 		return baseKey || origin;
 	}
 
-	fetchRecord(record: Record) {
+	fetchRecord() {
 		return new Promise<void>((resolve: () => void, reject: (err: any) => void) => {
 			let resolved = false;
 			// Disregard initial "interactive" state to work around browser issues.
@@ -46,8 +46,8 @@ export class Document implements LoaderPlugin {
 	}
 
 	discover(record: Record) {
-		const key = origin + window.location.pathname;
-		let num = 0;
+		const key = origin + window.location.pathname + window.location.search;
+		let inlineCount = 0;
 
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
 			const type = element.type;
@@ -55,14 +55,36 @@ export class Document implements LoaderPlugin {
 				element.setAttribute('type', '-' + type);
 
 				if(element.src) {
+					// External script.
 					record.addDep(URL.resolve(key, element.src));
 				} else {
-					++num;
+					// Inline script.
+					const code = element.text;
 
-					record.addDep(URL.resolve(key, '#' + num + '.js'), {
+					const inline: DepRef = {
 						format: 'js',
-						sourceCode: element.text
-					});
+						sourceKey: key,
+						// Remove leading whitespace to ensure a possible
+						// strict pragma remains on the first line.
+						sourceCode: code.replace(/^\s+/, ''),
+						// Inject transpiled inline scripts in order without
+						// a wrapper function to ensure they get evaluated
+						// in the correct environment.
+						eval: (record: Record) => {
+							const oldVars = assignReversible(globalEnv, record.argTbl);
+
+							const script = document.createElement('script');
+							const content = document.createTextNode(record.wrap(true, true));
+
+							script.appendChild(content);
+							element.parentNode!.replaceChild(script, element);
+
+							assign(globalEnv, oldVars);
+						}
+					};
+
+					++inlineCount;
+					record.addDep(URL.resolve(key, '#' + inlineCount + '.jsx'), inline);
 				}
 			}
 		}

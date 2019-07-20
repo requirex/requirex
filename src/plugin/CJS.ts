@@ -60,7 +60,7 @@ export class CJS implements LoaderPlugin {
 		const moduleInternal = record.moduleInternal as ModuleCJS;
 		let compiled = record.compiled;
 
-		if(!compiled) {
+		if(!compiled && !record.eval) {
 			try {
 				// Compile module into a function under global scope.
 				compiled = globalEval(record.wrap(true));
@@ -78,7 +78,12 @@ export class CJS implements LoaderPlugin {
 
 		try {
 			// Call imported module.
-			compiled.apply(moduleInternal.exports, record.argValues);
+			if(record.eval) {
+				record.eval(record);
+			} else {
+				compiled.apply(moduleInternal.exports, record.argValues);
+			}
+
 			moduleInternal.loaded = true;
 		} catch(err) {
 			error = err;
