@@ -60,14 +60,16 @@ export function keys(obj: { [key: string]: any }) {
 	return result;
 }
 
-/** Assign all members from src to dst object. */
+/** Assign all members from src to dst object.
+  *
+  * @param depth Recursion depth for nested objects.
+  * 0 for no recursion (default), < 0 for unlimited depth
+  * (latter will hang on circular structures).
+  * @return dst object. */
 
 export function assign(
 	dst: { [key: string]: any },
 	src: { [key: string]: any },
-	/** Recursion depth for nested objects.
-	  * 0 for no recursion, < 0 for unlimited depth
-	  * (latter will hang on circular structures). */
 	depth?: number
 ) {
 	for(let name of keys(src)) {

@@ -97,18 +97,10 @@ export class Record {
 		const argTbl = this.argTbl;
 
 		for(let def of defs) {
-			for(let name of keys(def)) {
-				argTbl[name] = def[name];
-			}
+			assign(argTbl, def);
 		}
 
-		const argNames = [];
-
-		for(let name of keys(argTbl)) {
-			argNames.push(name);
-		}
-
-		argNames.sort();
+		const argNames = keys(argTbl).sort();
 
 		this.argNames = argNames;
 		this.argValues = argNames.map((name: string) => argTbl[name]);
@@ -167,8 +159,8 @@ export class Record {
 	factory: ModuleFactory;
 
 	argTbl: { [name: string]: any } = {};
-	argNames: string[];
-	argValues: any[];
+	argNames: string[] = [];
+	argValues: any[] = [];
 
 	/** Index within bundle if applicable. */
 	num?: number;

@@ -13,7 +13,7 @@ import { Json } from './plugin/Json';
 import { Node } from './plugin/NodeBuiltin';
 import { NodeResolve } from './plugin/NodeResolve';
 import { Document } from './plugin/Document';
-import { Cache } from './plugin/Cache';
+import { FetchCache } from './plugin/Cache';
 
 import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
@@ -60,7 +60,7 @@ export const System = new Loader({
 
 		Node,
 		Document,
-		Cache
+		cache: FetchCache
 	},
 	registry: {
 		'@empty': {},

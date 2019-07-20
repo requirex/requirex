@@ -29,7 +29,7 @@ function subClone<Type extends Object>(obj: Type): Type {
 
 // TODO: Storage "polyfill" for Node, using require.resolve('requirex/cache') or os.tmpdir()
 
-export class Cache {
+export class FetchCache {
 
 	constructor(private loader: Loader) {
 		if(!features.isNode && typeof (window) == 'object') {
@@ -212,10 +212,6 @@ export class Cache {
 		let fetched: Promise<string>;
 		const storage = this.storage;
 
-		// TODO: Get old source code from cache before updating it after a remote fetch,
-		// then compare old and new version and if they are identical, re-use old metadata
-		// and transpiled code.
-
 		if(record.sourceCode) {
 			if(storage && !this.dataTbl[record.resolvedKey]) {
 				this.store(record.resolvedKey);
@@ -231,7 +227,9 @@ export class Cache {
 
 		return fetched.then((text: string) => {
 			let meta: CacheMeta | undefined = this.metaTbl[record.resolvedKey];
-			// console.log('FETCHED', record.resolvedKey, meta, text == this.textTbl[record.resolvedKey]);
+
+			// After remote fetch, compare cached and new version.
+			// If they are identical, re-use old metadata and transpiled code.
 
 			if(storage && meta && text == this.textTbl[record.resolvedKey]) {
 				const trans = storage.getItem(prefixTrans + record.resolvedKey);
@@ -240,7 +238,6 @@ export class Cache {
 					record.format = meta.format || record.format;
 					record.depList = meta.deps || [];
 					text = trans;
-					// console.log('CACHE', record.format, text.substr(0, 100));
 				}
 			}
 
@@ -275,6 +272,8 @@ export class Cache {
 	dataTbl: { [resolvedKey: string]: Promise<FetchResponse> } = {};
 
 	metaTbl: { [resolvedKey: string]: CacheMeta } = {};
+
+	/* Old source code from cache, from before fetching updates. */
 	textTbl: { [resolvedKey: string]: string | null } = {};
 
 }
