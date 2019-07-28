@@ -4,8 +4,19 @@ import { FetchOptions, FetchResponse } from './fetch';
 
 declare const process: any;
 
+function tryGlobal(obj: any, name: string) {
+	return obj[name] == obj && obj;
+}
+
 export const unsupported = 'Unsupported function ';
-export const globalEnv: { [name: string]: any } = typeof self == 'object' ? self : global;
+
+export const object = 'object';
+export const globalEnv: { [name: string]: any } = (
+	(typeof window == object && tryGlobal(window, 'window')) ||
+	(typeof self == object && tryGlobal(self, 'self')) ||
+	(typeof global == object && tryGlobal(global, 'global')) ||
+	new Function('return this')()
+);
 export const emptyPromise = Promise.resolve(void 0);
 
 const isNode = (
