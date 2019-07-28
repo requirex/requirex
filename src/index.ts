@@ -1,5 +1,7 @@
-import { features, globalEnv, getTags } from './platform';
-import { Loader, LoaderConfig } from './Loader';
+import { features, globalEnv, getTags, keys, assign } from './platform';
+import { Loader, LoaderConfig, LoaderPlugin } from './Loader';
+
+// Import all plugins to include in development bundle.
 
 import { JS } from './plugin/JS';
 import { AMD } from './plugin/AMD';
@@ -18,11 +20,13 @@ import { FetchCache } from './plugin/Cache';
 import { URL } from './URL';
 import { fetch, FetchResponse } from './fetch';
 
-export { LoaderConfig };
+export { LoaderConfig, LoaderPlugin };
 export { features, URL, fetch, FetchResponse, Loader };
+export { keys, assign };
 
 const internals = {
-	features, URL, fetch, FetchResponse, Loader
+	features, URL, fetch, FetchResponse, Loader,
+	keys, assign
 };
 
 features.fetch = fetch;
