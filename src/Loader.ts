@@ -276,6 +276,15 @@ export class Loader implements LoaderPlugin {
 		});
 	}
 
+	record(resolvedKey: string, sourceCode?: string, format?: ModuleFormat) {
+		const record = new Record(this, resolvedKey);
+
+		record.format = format || 'js';
+		if(sourceCode) record.sourceCode = sourceCode;
+
+		this.records[resolvedKey] = record;
+	}
+
 	/** Resolve and translate an imported dependency and its recursive dependencies.
 	  *
 	  * @param importKey Dependency name (module or file), may be a relative path.
@@ -348,7 +357,7 @@ export class Loader implements LoaderPlugin {
 		base.deepDepList.push(record);
 
 		if(!record.discovered) {
-			record.format = ref.format as any;
+			if(ref.format) record.format = ref.format as any;
 			if(ref.sourceCode) record.sourceCode = ref.sourceCode;
 
 			record.discovered = this.fetchRecord(record).then(
@@ -476,25 +485,29 @@ export class Loader implements LoaderPlugin {
 
 	wrap(record: Record) { return 'null' }
 
-	build(importKey: string, parent?: string) {
+	analyze(importKey: string, parent?: string) {
 		return fetchTranslate(this, false, importKey, parent).then((record: Record) => {
 			const pkgTbl: { [name: string]: { package: Package, records: Record[] } } = {};
-			const pkgList: string[] = [];
 
 			for(let dep of getAllDeps(record, {}, [])) {
-				const pkg = dep.pkg || this.package;
+				const pkg = dep.pkg || this.manager.getPackage(dep.resolvedKey) || this.package;
 				let spec = pkgTbl[pkg.name];
 
 				if(!spec) {
 					spec = { package: pkg, records: [] };
 					pkgTbl[pkg.name] = spec;
-					pkgList.push(pkg.name);
 				}
 
 				spec.records.push(dep);
 			}
 
-			pkgList.sort();
+			return pkgTbl;
+		});
+	}
+
+	build(importKey: string, parent?: string) {
+		return this.analyze(importKey, parent).then((pkgTbl) => {
+			const pkgList = keys(pkgTbl).sort();
 			let num = 0;
 
 			for(let name of pkgList) {
