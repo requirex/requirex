@@ -44,6 +44,7 @@ export const System = new Loader({
 			env: { 'NODE_ENV': 'production' }
 		}
 	},
+	mainFields: features.isNode ? [ 'main', 'module' ] : [ 'browser', 'main', 'module' ],
 	plugins: {
 		resolve: NodeResolve,
 

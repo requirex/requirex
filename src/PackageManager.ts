@@ -1,4 +1,5 @@
 import { Package } from './Package';
+import { LoaderConfig } from './Loader';
 
 export interface PackageMeta {
 	lockedVersion?: string;
@@ -11,6 +12,8 @@ export const enum RepoKind {
 }
 
 export class PackageManager {
+
+	constructor(public config: LoaderConfig) { }
 
 	registerCDN(cdn: string) {
 		this.repoTbl[cdn] = RepoKind.CDN;

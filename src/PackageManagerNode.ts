@@ -126,27 +126,30 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 
 	const pkg = new Package(name, rootKey);
 	pkg.version = version;
-	pkg.main = json.main || 'index.js';
+	pkg.main = 'index.js';
 
-	const browser = !features.isNode && json.browser;
+	for(let field of manager.config.mainFields || ['main']) {
+		const spec = json[field];
 
-	if(typeof browser == 'string') {
-		// Use browser entry point.
-		pkg.main = browser;
-	} else if(typeof browser == 'object') {
-		// Use browser equivalents of packages and files.
+		if(spec) {
+			if(field == 'browser' && typeof spec == 'object') {
+				// Use browser equivalents of packages and files.
 
-		for(let key of keys(browser)) {
-			const src = URL.resolve(rootKey + '/', key);
-			const dst = browser[key] || '@empty';
+				for(let key of keys(spec)) {
+					const src = URL.resolve(rootKey + '/', key);
+					const dst = spec[key] || '@empty';
 
-			const match = key.match(rePackage);
-			if(match) {
-				pkg.map[key] = dst;
+					if(rePackage.test(key)) {
+						pkg.map[key] = dst;
+					}
+
+					pkg.map[src] = dst;
+					pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
+				}
+			} else {
+				pkg.main = spec;
+				break;
 			}
-
-			pkg.map[src] = dst;
-			pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
 		}
 	}
 

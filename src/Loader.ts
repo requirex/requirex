@@ -35,6 +35,8 @@ export interface LoaderConfig {
 	/** Suggested dependency versions, format is like in package.json. */
 	dependencies?: { [name: string]: string };
 
+	mainFields?: string[];
+
 	/** Transpile imported CSS using PostCSS? */
 	postCSS?: boolean;
 	/** Minify transpiled CSS? */
@@ -617,7 +619,7 @@ export class Loader implements LoaderPlugin {
 
 	private currentConfig: LoaderConfig = {};
 
-	manager = new PackageManager();
+	manager = new PackageManager(this.currentConfig);
 	package = new Package('_', '');
 
 	/** Paths to node-modules directories containing modules under development,
