@@ -239,7 +239,11 @@ export class Loader implements LoaderPlugin {
 		return Promise.resolve(plugin && plugin.resolve ?
 			plugin.resolve(key, callerKey, ref) :
 			this.resolveSync(key, callerKey, ref)
-		).then((resolvedKey: string) => handleExtension(this, resolvedKey, ref));
+		).then(
+			(resolvedKey: string) => handleExtension(this, resolvedKey, ref)
+		).catch(
+			() => this.resolveSync(key, callerKey, ref)
+		);
 	}
 
 	fetch(url: string, options?: FetchOptions) {
