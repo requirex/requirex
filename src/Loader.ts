@@ -159,7 +159,7 @@ export class Loader implements LoaderPlugin {
 
 		this.baseURL = (origin &&
 			// TODO: Make sure a slash is added always when missing. Maybe cwd is a drive letter?
-			origin + this.cwd + (this.cwd == '/' ? '' : '/')
+			origin + this.cwd.replace(/([^/]|^)$/, '$1/')
 		);
 
 		this.config(config);
