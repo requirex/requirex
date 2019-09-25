@@ -2,21 +2,41 @@ import * as VM from 'vm';
 
 import { FetchOptions, FetchResponse } from './fetch';
 
+declare const __global__: typeof globalThis;
 declare const process: any;
 
 function tryGlobal(obj: any, name: string) {
 	return obj[name] == obj && obj;
 }
 
-export const unsupported = 'Unsupported function ';
+// See https://mathiasbynens.be/notes/globalthis
 
-export const object = 'object';
+function getGlobal() {
+	const proto: any = Object.prototype;
+	const magic = '__global__';
+
+	try {
+		Object.defineProperty(proto, magic, {
+			get: function() { return this; },
+			configurable: true
+		});
+
+		return __global__;
+	} finally {
+		delete proto[magic];
+	}
+}
+
+const object = 'object';
 export const globalEnv: { [name: string]: any } = (
-	(typeof window == object && tryGlobal(window, 'window')) ||
+	(typeof globalThis == object && tryGlobal(globalThis, 'globalThis')) ||
+	getGlobal() ||
 	(typeof self == object && tryGlobal(self, 'self')) ||
-	(typeof global == object && tryGlobal(global, 'global')) ||
-	new Function('return this')()
+	(typeof window == object && tryGlobal(window, 'window')) ||
+	(typeof global == object && tryGlobal(global, 'global'))
 );
+
+export const unsupported = 'Unsupported function ';
 export const emptyPromise = Promise.resolve(void 0);
 
 const isNode = (

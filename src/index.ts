@@ -22,11 +22,11 @@ import { fetch, FetchResponse } from './fetch';
 
 export { LoaderConfig, LoaderPlugin };
 export { features, URL, fetch, FetchResponse, Loader };
-export { keys, assign };
+export { globalEnv, keys, assign };
 
 const internals = {
 	features, URL, fetch, FetchResponse, Loader,
-	keys, assign
+	globalEnv, keys, assign
 };
 
 features.fetch = fetch;
