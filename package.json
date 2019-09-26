@@ -1,6 +1,6 @@
 {
   "name": "requirex",
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A different kind of module loader",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -39,10 +39,10 @@
     "systemjs"
   ],
   "devDependencies": {
-    "@types/node": "^12.0.12",
+    "@types/node": "^12.7.8",
     "autoroll": "^0.2.0",
-    "rollup": "^1.16.6",
-    "typescript": "^3.5.2",
+    "rollup": "^1.21.4",
+    "typescript": "^3.6.3",
     "uglify-js": "^3.6.0"
   }
 }
