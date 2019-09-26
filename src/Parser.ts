@@ -1,4 +1,5 @@
 import { Record, ModuleFormat } from './Record';
+import { ChangeSet, Patch } from './ChangeSet';
 import { features, makeTable } from './platform';
 
 const chunkSize = 128;
@@ -18,7 +19,7 @@ sepBefore[':'] = true;
   * @param keywords Separated by pipe characters, may use regexp syntax. */
 
 function matchTokens(keywords: string) {
-	return new RegExp('["\'`{}()]|\/[*/]?|' + keywords, 'g');
+	return new RegExp('[\n"\'`<{}()]|\/[*/]?|' + keywords, 'g');
 }
 
 /** Match a function call with a non-numeric literal as the first argument. */
@@ -62,6 +63,14 @@ const reBlock = new RegExp('^' + reComments + '\\{');
 /** Match an else statement after an if block. */
 const reElse = new RegExp('^' + reComments + 'else' + reComments + '(if|\\{)');
 
+const reStringEnd = {
+	"'": /['\n]/g,
+	'"': /["\n]/g,
+	'`': /[`\n]/g
+};
+
+const reCommentEnd = /\n|\*\//g;
+
 const enum ConditionMode {
 	/** Not inside any interesting "if" statements. */
 	NONE = 0,
@@ -75,7 +84,7 @@ const enum ConditionMode {
 	DEAD_BLOCK
 }
 
-class StackItem {
+class StackItem implements Patch {
 
 	constructor() {
 		this.clear();
@@ -96,8 +105,12 @@ class StackItem {
 	rootToken: string;
 
 	tracking?: boolean;
-	start?: number;
-	end?: number;
+	startOffset = 0;
+	startRow = 0;
+	startCol = 0;
+	endOffset = 0;
+	endRow = 0;
+	endCol = 0;
 
 	mode: ConditionMode;
 
@@ -181,6 +194,10 @@ function skipRegExp(text: string, pos: number) {
 				inClass = false;
 				break;
 
+			case '\n':
+
+				return -1;
+
 			case '/':
 
 				// A slash terminates the regexp unless inside a character class.
@@ -191,11 +208,44 @@ function skipRegExp(text: string, pos: number) {
 	return -1;
 }
 
-function parseSyntax(parser: TranslateConfig) {
-	const err = 'Parse error';
+export class UnterminatedError extends Error {
+
+	/** @param row Source line number (zero-based).
+	  * @param col Source column number (zero-based). */
+
+	// constructor(kind: string, public uri: string, public row: number, public col: number) {
+	constructor(kind: string, row: number, text: string, uri?: string) {
+		let col = 0;
+
+		for(let pos = 0; pos < text.length; ++pos) {
+			if(text.charAt(pos) == '\t') col |= 7;
+			++col;
+		}
+
+		super(
+			'Parse error: Unterminated ' + kind +
+			(!uri ? '' : ' in ' + uri) +
+			' on line ' + (row + 1) +
+			' column ' + (col + 1)
+		);
+
+		this.row = row;
+		this.col = col;
+		this.uri = uri;
+	}
+
+	row: number;
+	col: number;
+	uri?: string;
+
+}
+
+function parseSyntax(parser: TranslateConfig, uri?: string) {
 	const reToken = parser.reToken;
 	const stack = parser.stack;
 	const text = parser.text;
+	let row = 0;
+	let rowOffset = 0;
 	/** Nesting depth inside curly brace delimited blocks. */
 	let depth = 0;
 	let state: StackItem;
@@ -206,6 +256,9 @@ function parseSyntax(parser: TranslateConfig) {
 	let pos = 0;
 	let before: string;
 	let after: string;
+	let oldRow: number;
+	let oldOffset: number;
+	let re: RegExp;
 
 	// Loop through all interesting tokens in the input string.
 	while((match = reToken.exec(text))) {
@@ -218,7 +271,11 @@ function parseSyntax(parser: TranslateConfig) {
 				state = stack.get(depth + 1).clear(stack.items[depth]);
 				state.rootToken = token;
 
-				if(state.tracking) state.start = last;
+				if(state.tracking) {
+					state.startOffset = last;
+					state.startRow = row;
+					state.startCol = last - rowOffset;
+				}
 
 				++depth;
 				continue;
@@ -228,7 +285,9 @@ function parseSyntax(parser: TranslateConfig) {
 				state = stack.get(depth);
 
 				if(state.tracking) {
-					state.end = last + 1;
+					state.endOffset = last + 1;
+					state.endRow = row;
+					state.endCol = last - rowOffset + 1;
 					state.tracking = false;
 
 					// Ensure } token terminating a dead block still gets parsed.
@@ -239,19 +298,43 @@ function parseSyntax(parser: TranslateConfig) {
 				--depth;
 				continue;
 
-			case '//':
 			case '/*':
 
 				// Skip a comment. Find and jump past the end token.
-				token = (token == '//') ? '\n' : '*/';
+				re = reCommentEnd;
+				re.lastIndex = last + 2;
+				oldRow = row;
+				oldOffset = rowOffset;
+
+				while((match = re.exec(text)) && match[0] == '\n') {
+					++row;
+					rowOffset = match.index + 1;
+				}
+
+				if(!match) {
+					throw new UnterminatedError(
+						'comment',
+						oldRow,
+						text.substring(oldOffset, last),
+						uri
+					);
+				}
+
+				last = match.index;
+
+				break;
+
+			case '//':
+
+				token = '\n';
 				last = text.indexOf(token, last + 2);
 
-				if(last < 0) {
-					if(token == '\n') return;
+				if(last < 0) return;
 
-					// Unterminated comments are errors.
-					throw new Error(err);
-				}
+			case '\n':
+
+				++row;
+				rowOffset = last + token.length;
 
 				break;
 
@@ -266,9 +349,13 @@ function parseSyntax(parser: TranslateConfig) {
 
 				last = skipRegExp(text, last);
 
-				// Unterminated regular expressions are errors.
 				if(last < 0) {
-					throw new Error(err);
+					throw new UnterminatedError(
+						'regexp',
+						row,
+						text.substring(rowOffset, match.index),
+						uri
+					);
 				}
 
 				break;
@@ -280,15 +367,28 @@ function parseSyntax(parser: TranslateConfig) {
 			case '"': case "'":
 
 				// Skip a string.
+				re = reStringEnd[token];
+				re.lastIndex = last + 1;
+				oldRow = row;
+				oldOffset = rowOffset;
+
 				do {
 					// Look for a matching quote.
-					last = text.indexOf(token, last + 1);
-
-					// Unterminated strings are errors.
-					if(last < 0) {
-						throw new Error(err);
+					while((match = re.exec(text)) && token == '`' && match[0] == '\n') {
+						++row;
+						rowOffset = match.index + 1;
 					}
 
+					if(!match || match[0] == '\n') {
+						throw new UnterminatedError(
+							'string',
+							oldRow,
+							text.substring(oldOffset, last),
+							uri
+						);
+					}
+
+					last = match.index;
 					// Count leading backslashes. An odd number escapes the quote.
 					pos = last;
 					while(text.charAt(--pos) == '\\') { }
@@ -453,7 +553,6 @@ export class Parser implements TranslateConfig {
 		}
 
 		const record = this.record;
-		const patches = this.patches;
 		const parent = depth && stack.items[depth - 1];
 
 		// Handle end of "if" statement conditions (this token is only
@@ -466,7 +565,7 @@ export class Parser implements TranslateConfig {
 
 			if(
 				parent.mode == ConditionMode.STATIC_CONDITION &&
-				reBlock.test(text.substr(state.end!, chunkSize))
+				reBlock.test(text.substr(state.endOffset, chunkSize))
 			) {
 				if(parent.wasAlive) {
 					// If a previous block among the if-else statements
@@ -474,7 +573,7 @@ export class Parser implements TranslateConfig {
 					// must be.
 
 					parent.mode = ConditionMode.DEAD_BLOCK;
-					patches.push([state.start! + 1, state.end! - 1, '0']);
+					this.changeSet.add(state, 1, -1, '0');
 
 					stack.track(depth - 1);
 				} else {
@@ -483,8 +582,8 @@ export class Parser implements TranslateConfig {
 
 					/** Condition extracted from latest "if" statement. */
 					const condition = text.substr(
-						state.start!,
-						state.end! - state.start!
+						state.startOffset,
+						state.endOffset - state.startOffset
 					);
 
 					// Ensure the condition clearly has no side effects
@@ -498,7 +597,7 @@ export class Parser implements TranslateConfig {
 						)(record.globalTbl.process));
 
 						parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
-						patches.push([state.start! + 1, state.end! - 1, '' + alive]);
+						this.changeSet.add(state, 1, -1, '' + alive);
 
 						// If no errors were thrown, find the following
 						// curly brace delimited block.
@@ -522,17 +621,17 @@ export class Parser implements TranslateConfig {
 				parent.mode = ConditionMode.DEAD_BLOCK;
 			} else {
 				// Remove dead code.
-				patches.push([state.start! + 1, state.end! - 1, '']);
+				this.changeSet.add(state, 1, -1, '');
 				// Prepare for an "else" statement.
 				if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
 			}
 
 			/** Match a following "else" statement followed by an "if" or
 			  * curly brace delimited block. */
-			const elseMatch = text.substr(state.end!, chunkSize).match(reElse);
+			const elseMatch = text.substr(state.endOffset!, chunkSize).match(reElse);
 
 			if(elseMatch) {
-				parent.conditionStart = state.end! + elseMatch[0].length - 1;
+				parent.conditionStart = state.endOffset! + elseMatch[0].length - 1;
 				stack.track(depth - 1);
 			} else {
 				parent.mode = ConditionMode.NONE;
@@ -566,28 +665,8 @@ export class Parser implements TranslateConfig {
 	}
 
 	parse() {
-		parseSyntax(this);
+		parseSyntax(this, this.record.resolvedKey);
 		return this;
-	}
-
-	/** Apply patches from conditional compilation.
-	  *
-	  * @return patched string. */
-
-	applyPatches() {
-		const text = this.text;
-
-		if(!this.patches.length) return text;
-
-		let result = '';
-		let pos = 0;
-
-		for(let [start, end, replacement] of this.patches) {
-			result += text.substr(pos, start - pos) + replacement;
-			pos = end;
-		}
-
-		return result + text.substr(pos);
 	}
 
 	/** Finished trying to detect the module format? */
@@ -601,8 +680,6 @@ export class Parser implements TranslateConfig {
 
 	stack = new StateStack();
 
-	/** String replacements to apply to input source code, similar to array.splice.
-	  * Format is: start, end, replacement. */
-	patches: [number, number, string][] = [];
+	changeSet = new ChangeSet();
 
 }

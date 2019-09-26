@@ -29,7 +29,7 @@ export class JS implements LoaderPlugin {
 
 		const parser = new Parser(text, record).parse();
 
-		record.sourceCode = parser.applyPatches();
+		record.sourceCode = parser.changeSet.patchCode(text);
 	}
 
 	/** Run code with no module format, for example a requirex bundle. */
