@@ -69,8 +69,9 @@ export const System = new Loader({
 	},
 	registry: {
 		'@empty': {},
-		// Prevent TypeScript compiler from importing an optional module.
+		// Prevent TypeScript compiler from importing some optional modules.
 		'source-map-support': {},
+		'@microsoft/typescript-etw': {},
 		requirex
 	},
 	dependencies: {

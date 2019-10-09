@@ -39,12 +39,12 @@
     "systemjs"
   ],
   "devDependencies": {
-    "@types/node": "^12.7.8",
+    "@types/node": "^12.7.12",
     "autoroll": "^0.2.0",
     "mrepo": "0.0.2",
-    "rollup": "^1.21.4",
+    "rollup": "^1.23.1",
     "typescript": "^3.6.3",
-    "uglify-js": "^3.6.0"
+    "uglify-js": "^3.6.1"
   },
   "dependencies": {
     "@lib/base64": "^0.1.0",
