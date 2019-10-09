@@ -1,6 +1,8 @@
 import { ModuleType } from './Module';
 import { Package } from './Package';
 import { keys, assign } from './platform';
+import { SourceMap } from './SourceMap';
+import { ChangeSet } from './ChangeSet';
 import { Loader } from './Loader';
 
 export type ModuleFormat = (
@@ -32,6 +34,7 @@ export interface DepRef {
 	format?: string;
 	sourceKey?: string;
 	sourceCode?: string;
+	sourceOriginal?: string;
 	eval?: (record: Record) => void;
 }
 
@@ -123,17 +126,40 @@ export class Record {
 
 		if(debug) {
 			const strict = code.match(/^[ \t]*["'`]use strict["'`][ \t\r;]*\n/);
+			let offset = 0;
+			let row = 0;
+			let col = 0;
 
 			if(strict) {
 				// Always hoist strictness pragma to the top.
-				prologue = strict[0] + prologue;
-				code = code.substr(strict[0].length);
+				offset = strict[0].length;
+				col = offset;
+				++row;
 			}
 
-			epilogue += '\n//# sourceURL=' + (this.sourceKey || this.resolvedKey);
-		}
+			epilogue += '\n//# sourceURL=' + this.resolvedKey;
 
-		return prologue + code + epilogue;
+			const changes = new ChangeSet().add({
+				startOffset: offset,
+				startRow: row,
+				startCol: col,
+				endOffset: offset,
+				endRow: row,
+				endCol: col,
+				replacement: prologue
+			});
+
+			if(this.sourceMap) {
+				epilogue += (
+					'!transpiled' +
+					'\n//# sourceMappingURL=' + this.sourceMap.patchOutput(changes).encodeURL()
+				);
+			}
+
+			return changes.patchCode(code) + epilogue;
+		} else {
+			return prologue + code + epilogue;
+		}
 	}
 
 	/** Autodetected or configured format of the module. */
@@ -177,6 +203,8 @@ export class Record {
 
 	/** Address to show in sourceURL comment. */
 	sourceKey?: string;
+	sourceMap?: SourceMap;
+	sourceOriginal?: string;
 
 	/** Optional custom evaluation function. For example HTML inline scripts
 	  * cannot use default eval() because they need a shared scope. */

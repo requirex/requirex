@@ -2,6 +2,7 @@ import * as Lib from 'typescript';
 
 import { Record } from '../Record';
 import { makeTable, keys } from '../platform';
+import { SourceMap, SourceMapSpec } from '../SourceMap';
 import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
@@ -18,6 +19,7 @@ function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
 			allowJs: true,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
+			sourceMap: true,
 			target: ts.ScriptTarget.ES5,
 			module: ts.ModuleKind.CommonJS
 			// module: ts.ModuleKind.AMD
@@ -43,7 +45,7 @@ function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
 		getScriptSnapshot: (key: string) => {
 			const record = loader.records[key];
 
-			return record.tsSnapshot || (
+			if(record) return record.tsSnapshot || (
 				record.tsSnapshot = ts.ScriptSnapshot.fromString(record.sourceCode)
 			);
 		},
@@ -92,11 +94,25 @@ export class TS implements LoaderPlugin {
 		if(record.format == 'd.ts') return;
 		const key = record.resolvedKey;
 		const jsKey = record.resolvedKey.replace(/\.[jt]sx?$/, '.js');
+		const mapKey = jsKey + '.map';
+
+		const keyTbl: { [key: string]: SourceMapSpec } = {};
+
+		keyTbl[key] = {
+			key: record.sourceKey || key,
+			code: record.sourceOriginal
+		};
 
 		for(let info of this.tsService.getEmitOutput(key).outputFiles) {
 			if(info.name == jsKey) {
 				record.format = 'js';
-				record.sourceCode = info.text;
+				// Remove existing reference to a source map file.
+				// It will be emitted inline instead.
+				record.sourceCode = SourceMap.removeComment(info.text);
+			}
+			if(info.name == mapKey) {
+				// Store source map, to be transformed and emitted later.
+				record.sourceMap = new SourceMap(key, info.text, keyTbl);
 			}
 		}
 

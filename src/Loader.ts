@@ -351,6 +351,7 @@ export class Loader implements LoaderPlugin {
 		} else if(!record) {
 			record = new Record(this, resolvedKey, importKey, ref.package);
 			record.sourceKey = ref.sourceKey;
+			record.sourceOriginal = ref.sourceOriginal;
 			record.eval = ref.eval;
 			this.records[resolvedKey] = record;
 		}

@@ -3,6 +3,163 @@ import { Record, DepRef } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
 import { origin, getTags, globalEnv, assign, assignReversible } from '../platform';
 
+interface TreeItem<Type> extends Array<Node | TreeItem<Type>> {
+	/** Root node of this branch.
+	  * All other array items are child branches. */
+	[0]: Node;
+	data?: Type;
+}
+
+export const enum NodeType {
+	ELEMENT_NODE = 1,
+	TEXT_NODE = 3,
+	CDATA_SECTION_NODE = 4,
+	PROCESSING_INSTRUCTION_NODE = 7,
+	COMMENT_NODE = 8,
+	DOCUMENT_NODE = 9,
+	DOCUMENT_TYPE_NODE = 10,
+	DOCUMENT_FRAGMENT_NODE = 11
+}
+
+/** Store paths to specific nodes in a document and emit the entire document
+  * as HTML while tracking the location of or transforming those nodes. */
+
+class NodeTree<Type> {
+
+	/** @param node Any node from the document this tree should represent. */
+
+	constructor(node: Node) {
+		let root: Node;
+
+		do {
+			root = node;
+		} while((node = node.parentNode as Node));
+
+		this.root = [root];
+	}
+
+	add(node: Node, data: Type) {
+		const stack = [node];
+		let item = this.root;
+
+		while((node = node.parentNode as Node)) {
+			stack.push(node);
+		}
+
+		// Ensure node is in the same DOM tree (= document).
+		if(stack.pop() != item[0]) return;
+
+		while((node = stack.pop()!)) {
+			// Check if node is an already found child.
+			let num = item.length;
+			while(--num && node != (item[num] as TreeItem<Type>)[0]) {}
+
+			if(!num) {
+				// Append previously missing child.
+				num = item.length;
+				item[num] = [node];
+			}
+
+			item = item[num] as TreeItem<Type>;
+		}
+
+		item.data = data;
+	}
+
+	emit() {
+		let result = '';
+		let stack = [this.root, 0, ''];
+		let stackPos = 6;
+		let html: string;
+		let row = 0;
+		let col = 0;
+
+		function trackPos(html?: string | null) {
+			let rowOffset = 0;
+			let pos = 0;
+
+			html = html || '';
+
+			while((pos = html.indexOf('\n', pos) + 1)) {
+				++row;
+				col = 0;
+				rowOffset = pos;
+			}
+
+			col += html.length - rowOffset;
+
+			return html;
+		}
+
+		while(stackPos -= 3) {
+			const item = stack[stackPos - 3] as TreeItem<Type>;
+			let node = item[0];
+			const children = node.childNodes;
+			const count = children.length;
+
+			for(let childNum = stack[stackPos - 2] as number; childNum < count; ++childNum) {
+				let chunk: string | null = '';
+				node = children[childNum];
+
+				switch(node.nodeType) {
+					case NodeType.ELEMENT_NODE:
+
+						const element = node as HTMLElement;
+						let num = item.length;
+
+						while(--num && node != (item[num] as TreeItem<Type>)[0]) {}
+
+						if(!num) {
+							chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + element.outerHTML;
+						} else {
+							const branch = item[num] as TreeItem<Type>;
+							html = (element.cloneNode(false) as HTMLElement).outerHTML;
+							const split = html.lastIndexOf('></') + 1 || html.length;
+							const open = html.substr(0, split);
+							const close = html.substr(split);
+
+							if(branch.data) {
+								chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + open + 'FOO' + close;
+							} else {
+								chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + open;
+
+								stack[stackPos - 2] = childNum + 1;
+
+								stack[stackPos] = branch;
+								stack[stackPos + 1] = 0;
+								stack[stackPos + 2] = close;
+								stackPos += 6;
+								childNum = count + 1;
+							}
+						}
+						break;
+
+					case NodeType.TEXT_NODE:
+
+						chunk = node.nodeValue;
+						break;
+
+					case NodeType.COMMENT_NODE:
+
+						chunk = '<!--' + node.nodeValue + '-->';
+						break;
+				}
+
+				if(childNum == count) {
+					chunk += stack[stackPos - 1] as string;
+				}
+
+				result += trackPos(chunk);
+			}
+		}
+
+		return result;
+	}
+
+	root: TreeItem<Type>;
+
+}
+
 /** Document element loader plugin. */
 
 export class Document implements LoaderPlugin {
@@ -46,12 +203,15 @@ export class Document implements LoaderPlugin {
 	}
 
 	discover(record: Record) {
+		const tree = new NodeTree<DepRef>(document);
 		const key = origin + window.location.pathname + window.location.search;
+		const inlineList: DepRef[] = [];
 		let inlineCount = 0;
 
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
 			const type = element.type;
 			if(type && type.substr(0, 5) == 'x-req') {
+				// Prepend hyphen to avoid processing the same script twice.
 				element.setAttribute('type', '-' + type);
 
 				if(element.src) {
@@ -59,11 +219,12 @@ export class Document implements LoaderPlugin {
 					record.addDep(URL.resolve(key, element.src));
 				} else {
 					// Inline script.
-					const code = element.text;
+					++inlineCount;
 
+					const code = element.text;
 					const inline: DepRef = {
 						format: 'js',
-						sourceKey: key,
+						sourceKey: URL.resolve(key, 'Script%20' + inlineCount),
 						// Remove leading whitespace to ensure a possible
 						// strict pragma remains on the first line.
 						sourceCode: code.replace(/^\s+/, ''),
@@ -77,15 +238,28 @@ export class Document implements LoaderPlugin {
 							const content = document.createTextNode(record.wrap(true, true));
 
 							script.appendChild(content);
+							// Replacing the script element should immediately
+							// run the code synchronously.
 							element.parentNode!.replaceChild(script, element);
 
 							assign(globalEnv, oldVars);
 						}
 					};
 
-					++inlineCount;
-					record.addDep(URL.resolve(key, '#' + inlineCount + '.jsx'), inline);
+					// Trace script element location for source map.
+					tree.add(element, inline);
+
+					inlineList[inlineCount - 1] = inline;
+					record.addDep(URL.resolve(key, 'Inline%20' + inlineCount + '#.ts'), inline);
 				}
+			}
+		}
+
+		if(inlineCount) {
+			const original = tree.emit();
+
+			for(let inline of inlineList) {
+				inline.sourceOriginal = original;
 			}
 		}
 	}

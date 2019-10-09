@@ -41,8 +41,13 @@
   "devDependencies": {
     "@types/node": "^12.7.8",
     "autoroll": "^0.2.0",
+    "mrepo": "0.0.2",
     "rollup": "^1.21.4",
     "typescript": "^3.6.3",
     "uglify-js": "^3.6.0"
+  },
+  "dependencies": {
+    "@lib/base64": "^0.1.0",
+    "@lib/base64-vlq": "^0.1.0"
   }
 }

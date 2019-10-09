@@ -573,7 +573,7 @@ export class Parser implements TranslateConfig {
 					// must be.
 
 					parent.mode = ConditionMode.DEAD_BLOCK;
-					this.changeSet.add(state, 1, -1, '0');
+					this.changeSet.add(state, '0', 1, -1);
 
 					stack.track(depth - 1);
 				} else {
@@ -597,7 +597,7 @@ export class Parser implements TranslateConfig {
 						)(record.globalTbl.process));
 
 						parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
-						this.changeSet.add(state, 1, -1, '' + alive);
+						this.changeSet.add(state, '' + alive, 1, -1);
 
 						// If no errors were thrown, find the following
 						// curly brace delimited block.
@@ -621,7 +621,7 @@ export class Parser implements TranslateConfig {
 				parent.mode = ConditionMode.DEAD_BLOCK;
 			} else {
 				// Remove dead code.
-				this.changeSet.add(state, 1, -1, '');
+				this.changeSet.add(state, '', 1, -1);
 				// Prepare for an "else" statement.
 				if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
 			}

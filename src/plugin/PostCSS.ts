@@ -1,5 +1,6 @@
 import { URL } from '../URL';
 import { Record } from '../Record';
+import { SourceMap } from '../SourceMap';
 import { Loader, LoaderPlugin } from '../Loader';
 import * as Lib from 'requirex-postcss-bundle';
 
@@ -86,7 +87,7 @@ export class PostCSS implements LoaderPlugin {
 			);
 		}).then((code: string) => {
 			record.format = 'cssraw';
-			record.sourceCode = code;
+			record.sourceCode = SourceMap.removeComment(code);
 		}).catch((err: any) => {
 			console.error(err);
 		});

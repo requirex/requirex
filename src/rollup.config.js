@@ -4,5 +4,7 @@ module.exports = {
 		file: '../dist/umd/index.js',
 		name: 'requirex',
 		format: 'umd'
-	}
+	},
+	onwarn: require('mrepo').onwarn,
+	plugins: [ { resolveId: require('mrepo').resolve } ]
 };

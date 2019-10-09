@@ -18,7 +18,7 @@ export interface Patch {
 
 export class ChangeSet {
 
-	add(patch: Patch, startColOffset = 0, endColOffset = 0, replacement = '') {
+	add(patch: Patch, replacement?: string, startColOffset = 0, endColOffset = 0) {
 		this.patches.push({
 			startOffset: patch.startOffset + startColOffset,
 			startRow: patch.startRow,
@@ -26,8 +26,10 @@ export class ChangeSet {
 			endOffset: patch.endOffset + endColOffset,
 			endRow: patch.endRow,
 			endCol: patch.endCol + endColOffset,
-			replacement: replacement
+			replacement: replacement || patch.replacement || ''
 		});
+
+		return this;
 	}
 
 	/** Apply patches to source code string.
