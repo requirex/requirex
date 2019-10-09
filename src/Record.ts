@@ -7,6 +7,7 @@ import { Loader } from './Loader';
 
 export type ModuleFormat = (
 	'js' |
+	'jsx' |
 	'amd' |
 	'cjs' |
 	'system' |

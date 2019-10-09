@@ -22,6 +22,8 @@ function matchTokens(keywords: string) {
 	return new RegExp('[\n"\'`<{}()]|\/[*/]?|' + keywords, 'g');
 }
 
+const reXML = /[<>"'`{]/g;
+
 /** Match a function call with a non-numeric literal as the first argument. */
 const reCallLiteral = /^\s*\(\s*["'`\[{_$A-Za-z]/;
 
@@ -50,10 +52,14 @@ const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
 
 /** Match a non-identifier, non-numeric character or return statement
   * before a regular expression or JSX element.
-  * Example code seen in the wild: function(t){return/[A-Z]+/g.test(t)} */
+  * Example code seen in the wild: function(t){return/[A-Z]+/g.test(t)}
+  * < is omitted to avoid confusion with closing JSX elements when detecting
+  * a regexp, or << operators when detecting a JSX element. */
 const reBeforeLiteral = new RegExp(
-	'(^|[-!%&(*+,:;<=>?\\[^{|}~]|[^*/]/)' + reComments + '(return\\s*)?$'
+	'(^|[-!%&(*+,:;=>?\\[^{|}~]|[^*/]/)' + reComments + '(return\\s*)?$'
 );
+
+const reElement = /<\/?\s*([^ !"#%&'()*+,./:;<=>?@[\\\]^`{|}~]+)(\s+|\/?>)/;
 
 /** Match any potential function call or assignment, including suspicious comments before parens. */
 const reCallAssign = /(\*\/|[^-\t\n\r !"#%&'(*+,./:;<=>?@[\\^`{|~])\s*\(|[^!=]=[^=]|\+\+|--/;
@@ -81,7 +87,9 @@ const enum ConditionMode {
 	/** Inside a conditionally compiled block to be left in place. */
 	ALIVE_BLOCK,
 	/** Inside a conditionally compiled block to eliminate. */
-	DEAD_BLOCK
+	DEAD_BLOCK,
+	FROM_XML,
+	FROM_JS
 }
 
 class StackItem implements Patch {
@@ -124,6 +132,9 @@ class StackItem implements Patch {
 	/** Inside an always false condition or bundled code,
 	  * to be ignored in parsing. */
 	isDead: boolean;
+
+	element?: string;
+	isClosing?: boolean;
 
 }
 
@@ -241,7 +252,7 @@ export class UnterminatedError extends Error {
 }
 
 function parseSyntax(parser: TranslateConfig, uri?: string) {
-	const reToken = parser.reToken;
+	let reToken = parser.reToken;
 	const stack = parser.stack;
 	const text = parser.text;
 	let row = 0;
@@ -250,6 +261,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 	let depth = 0;
 	let state: StackItem;
 	let match: RegExpExecArray | null;
+	let parts: RegExpMatchArray | null;
 	/** Latest matched token. */
 	let token: string;
 	let last: number;
@@ -258,6 +270,8 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 	let after: string;
 	let oldRow: number;
 	let oldOffset: number;
+	/** Flag whether token is inside a JSX text node. */
+	let isText = false;
 	let re: RegExp;
 
 	// Loop through all interesting tokens in the input string.
@@ -278,6 +292,13 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				}
 
 				++depth;
+
+				if(reToken != parser.reToken) {
+					state.mode = ConditionMode.FROM_XML;
+					reToken = parser.reToken;
+					break;
+				}
+
 				continue;
 
 			case ')': case '}': case ']':
@@ -296,6 +317,12 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				}
 
 				--depth;
+
+				if(state.mode == ConditionMode.FROM_XML) {
+					reToken = reXML;
+					break;
+				}
+
 				continue;
 
 			case '/*':
@@ -360,11 +387,70 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 
 				break;
 
+			case '<':
+
+				// Test if the angle bracket begins a JSX element.
+				pos = Math.max(last - chunkSize, 0);
+
+				if(
+					(reToken == reXML || reBeforeLiteral.test(text.substr(pos, last - pos))) &&
+					(parts = text.substr(last, chunkSize).match(reElement))
+				) {
+					if(text.charAt(last + 1) != '/') {
+						state = stack.get(depth + 1).clear(stack.items[depth]);
+						state.element = parts[1];
+						state.isClosing = false;
+
+						++depth;
+					} else {
+						state = stack.get(depth);
+						state.isClosing = true;
+
+						if(parts[1] != state.element) {
+							throw new UnterminatedError(
+								state.element + ' element',
+								row,
+								text.substring(rowOffset, match.index),
+								uri
+							);
+						}
+					}
+
+					isText = false;
+
+					if(reToken == parser.reToken) {
+						state.mode = ConditionMode.FROM_JS;
+						reToken = reXML;
+						break;
+					}
+				}
+
+				continue;
+
+			case '>':
+
+				state = stack.get(depth);
+
+				if(text.charAt(last - 1) == '/' || state.isClosing) {
+					--depth;
+
+					if(state.mode == ConditionMode.FROM_JS) {
+						reToken = parser.reToken;
+						isText = false;
+						break;
+					}
+				}
+
+				isText = true;
+				continue;
+
 			case '`':
 
-				parser.handler(token, depth, pos, last);
+				if(!isText) parser.handler(token, depth, pos, last);
 
 			case '"': case "'":
+
+				if(isText) continue;
 
 				// Skip a string.
 				re = reStringEnd[token];

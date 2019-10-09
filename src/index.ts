@@ -49,6 +49,7 @@ export const System = new Loader({
 		resolve: NodeResolve,
 
 		JS,
+		jsx: JS,
 		AMD,
 		CJS,
 		system: Register,
