@@ -2,6 +2,7 @@ import { Record, ModuleFormat } from './Record';
 import { ChangeSet, Patch } from './ChangeSet';
 import { features, makeTable } from './platform';
 
+/** Lookahead / behind buffer size to speed up matching surrounding tokens. */
 const chunkSize = 128;
 
 /** Table of characters that may surround keyword and identifier names. */
@@ -22,6 +23,7 @@ function matchTokens(keywords: string) {
 	return new RegExp('[\n"\'`<{}()]|\/[*/]?|' + keywords, 'g');
 }
 
+/** Match characters relevant when inside JSX elements. */
 const reXML = /[<>"'`{]/g;
 
 /** Match a function call with a non-numeric literal as the first argument. */
@@ -59,6 +61,8 @@ const reBeforeLiteral = new RegExp(
 	'(^|[-!%&(*+,:;=>?\\[^{|}~]|[^*/]/)' + reComments + '(return\\s*)?$'
 );
 
+/** Match the start of a JSX element: angle bracket, name, and whitespace or closing bracket.
+  * A slash next to one of the brackets is optional. */
 const reElement = /<\/?\s*([^ !"#%&'()*+,./:;<=>?@[\\\]^`{|}~]+)(\s+|\/?>)/;
 
 /** Match any potential function call or assignment, including suspicious comments before parens. */
@@ -69,15 +73,17 @@ const reBlock = new RegExp('^' + reComments + '\\{');
 /** Match an else statement after an if block. */
 const reElse = new RegExp('^' + reComments + 'else' + reComments + '(if|\\{)');
 
+/** Regexps to find matching quote characters and track newlines inside strings. */
 const reStringEnd = {
 	"'": /['\n]/g,
 	'"': /["\n]/g,
 	'`': /[`\n]/g
 };
 
+/** Match end of multiline comment and track newlines to support row / column numbers. */
 const reCommentEnd = /\n|\*\//g;
 
-const enum ConditionMode {
+const enum FrameMode {
 	/** Not inside any interesting "if" statements. */
 	NONE = 0,
 	/** Inside the conditions of an "if" statement. */
@@ -88,23 +94,29 @@ const enum ConditionMode {
 	ALIVE_BLOCK,
 	/** Inside a conditionally compiled block to eliminate. */
 	DEAD_BLOCK,
+	/** Outermost JSX element, surrounded by JS code. */
 	FROM_XML,
+	/** Outermost JS block, surrounded by JSX elements. */
 	FROM_JS
 }
 
-class StackItem implements Patch {
+class StackFrame implements Patch {
 
 	constructor() {
 		this.clear();
 	}
 
-	clear(parent?: StackItem) {
-		this.mode = ConditionMode.NONE;
+	/** Reset stack frame fields which the parser expects initially unset.
+	  *
+	  * @param parent Parent stack frame to track if inside known-dead code. */
+
+	clear(parent?: StackFrame) {
+		this.mode = FrameMode.NONE;
 		this.conditionStart = 0;
 		this.wasAlive = false;
 
 		if(parent) {
-			this.isDead = parent.isDead || parent.mode == ConditionMode.DEAD_BLOCK;
+			this.isDead = parent.isDead || parent.mode == FrameMode.DEAD_BLOCK;
 		}
 
 		return this;
@@ -120,7 +132,8 @@ class StackItem implements Patch {
 	endRow = 0;
 	endCol = 0;
 
-	mode: ConditionMode;
+	/** Semantic meaning of the stack frame if relevant. */
+	mode: FrameMode;
 
 	/** Start offset of "if" statement condition. */
 	conditionStart: number;
@@ -133,7 +146,9 @@ class StackItem implements Patch {
 	  * to be ignored in parsing. */
 	isDead: boolean;
 
+	/** Name to ensure opening and closing JSX elements match. */
 	element?: string;
+	/** Flag whether element is closing (starts with a slash). */
 	isClosing?: boolean;
 
 }
@@ -141,7 +156,7 @@ class StackItem implements Patch {
 class StateStack {
 
 	get(depth: number) {
-		return this.items[depth] || (this.items[depth] = new StackItem());
+		return this.frames[depth] || (this.frames[depth] = new StackFrame());
 	}
 
 	/** Track start and end offsets of parens and braces,
@@ -151,7 +166,7 @@ class StateStack {
 		this.get(depth + 1).tracking = true;
 	}
 
-	items: StackItem[] = [new StackItem()];
+	frames: StackFrame[] = [new StackFrame()];
 
 }
 
@@ -259,7 +274,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 	let rowOffset = 0;
 	/** Nesting depth inside curly brace delimited blocks. */
 	let depth = 0;
-	let state: StackItem;
+	let state: StackFrame;
 	let match: RegExpExecArray | null;
 	let parts: RegExpMatchArray | null;
 	/** Latest matched token. */
@@ -282,7 +297,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 		switch(token) {
 			case '(': case '{': case '[':
 
-				state = stack.get(depth + 1).clear(stack.items[depth]);
+				state = stack.get(depth + 1).clear(stack.frames[depth]);
 				state.rootToken = token;
 
 				if(state.tracking) {
@@ -294,7 +309,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				++depth;
 
 				if(reToken != parser.reToken) {
-					state.mode = ConditionMode.FROM_XML;
+					state.mode = FrameMode.FROM_XML;
 					reToken = parser.reToken;
 					break;
 				}
@@ -312,13 +327,13 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 					state.tracking = false;
 
 					// Ensure } token terminating a dead block still gets parsed.
-					state.isDead = stack.items[depth - 1].isDead;
+					state.isDead = stack.frames[depth - 1].isDead;
 					parser.handler(token, depth, pos, last);
 				}
 
 				--depth;
 
-				if(state.mode == ConditionMode.FROM_XML) {
+				if(state.mode == FrameMode.FROM_XML) {
 					reToken = reXML;
 					break;
 				}
@@ -393,19 +408,25 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				pos = Math.max(last - chunkSize, 0);
 
 				if(
-					(reToken == reXML || reBeforeLiteral.test(text.substr(pos, last - pos))) &&
+					// Test if token is inside a text node or
+					// in a valid place for a JS literal.
+					(isText || reBeforeLiteral.test(text.substr(pos, last - pos))) &&
+					// Match the start of a JSX element.
 					(parts = text.substr(last, chunkSize).match(reElement))
 				) {
 					if(text.charAt(last + 1) != '/') {
-						state = stack.get(depth + 1).clear(stack.items[depth]);
+						// Capture an opening element in the stack.
+						state = stack.get(depth + 1).clear(stack.frames[depth]);
 						state.element = parts[1];
 						state.isClosing = false;
 
 						++depth;
 					} else {
+						// Prepare to pop a closing element off the stack.
 						state = stack.get(depth);
 						state.isClosing = true;
 
+						// Ensure name matches opening element.
 						if(parts[1] != state.element) {
 							throw new UnterminatedError(
 								state.element + ' element',
@@ -416,10 +437,12 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 						}
 					}
 
+					// Currently inside an element, not a text node.
 					isText = false;
 
-					if(reToken == parser.reToken) {
-						state.mode = ConditionMode.FROM_JS;
+					// Ensure tokens relevant to JSX elements are matched next.
+					if(reToken != reXML) {
+						state.mode = FrameMode.FROM_JS;
 						reToken = reXML;
 						break;
 					}
@@ -429,18 +452,23 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 
 			case '>':
 
+				// Closing angle brackets are relevant only when parsing JSX.
+				if(reToken != reXML) continue;
+
 				state = stack.get(depth);
 
 				if(text.charAt(last - 1) == '/' || state.isClosing) {
+					// Pop closing element off the stack.
 					--depth;
 
-					if(state.mode == ConditionMode.FROM_JS) {
+					if(state.mode == FrameMode.FROM_JS) {
 						reToken = parser.reToken;
 						isText = false;
 						break;
 					}
 				}
 
+				// Text nodes may follow elements.
 				isText = true;
 				continue;
 
@@ -453,6 +481,8 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				if(isText) continue;
 
 				// Skip a string.
+				// Note that dependencies referred in template literals like
+				// `${require('react')}` are not detected.
 				re = reStringEnd[token];
 				re.lastIndex = last + 1;
 				oldRow = row;
@@ -607,11 +637,11 @@ export class Parser implements TranslateConfig {
 			let conditionDepth = depth;
 
 			while(conditionDepth--) {
-				const up = stack.items[conditionDepth];
+				const up = stack.frames[conditionDepth];
 
 				if(up.rootToken != '(') {
-					if(up.mode == ConditionMode.CONDITION) {
-						up.mode = ConditionMode.STATIC_CONDITION;
+					if(up.mode == FrameMode.CONDITION) {
+						up.mode = FrameMode.STATIC_CONDITION;
 					}
 
 					break;
@@ -629,17 +659,17 @@ export class Parser implements TranslateConfig {
 		if(token == 'if') {
 			state.conditionStart = last;
 
-			if(state.mode == ConditionMode.NONE) {
+			if(state.mode == FrameMode.NONE) {
 				state.wasAlive = false;
 			}
 
-			state.mode = ConditionMode.CONDITION;
+			state.mode = FrameMode.CONDITION;
 			// Track "if" statement conditions.
 			stack.track(depth);
 		}
 
 		const record = this.record;
-		const parent = depth && stack.items[depth - 1];
+		const parent = depth && stack.frames[depth - 1];
 
 		// Handle end of "if" statement conditions (this token is only
 		// emitted when tracking is turned on).
@@ -650,7 +680,7 @@ export class Parser implements TranslateConfig {
 			// is still unsupported).
 
 			if(
-				parent.mode == ConditionMode.STATIC_CONDITION &&
+				parent.mode == FrameMode.STATIC_CONDITION &&
 				reBlock.test(text.substr(state.endOffset, chunkSize))
 			) {
 				if(parent.wasAlive) {
@@ -658,13 +688,13 @@ export class Parser implements TranslateConfig {
 					// was not eliminated, all following "else" blocks
 					// must be.
 
-					parent.mode = ConditionMode.DEAD_BLOCK;
+					parent.mode = FrameMode.DEAD_BLOCK;
 					this.changeSet.add(state, '0', 1, -1);
 
 					stack.track(depth - 1);
 				} else {
 					// Stop conditional compilation if an error occurs.
-					parent.mode = ConditionMode.NONE;
+					parent.mode = FrameMode.NONE;
 
 					/** Condition extracted from latest "if" statement. */
 					const condition = text.substr(
@@ -682,7 +712,7 @@ export class Parser implements TranslateConfig {
 							'(function(process){return' + condition + '})'
 						)(record.globalTbl.process));
 
-						parent.mode = alive ? ConditionMode.ALIVE_BLOCK : ConditionMode.DEAD_BLOCK;
+						parent.mode = alive ? FrameMode.ALIVE_BLOCK : FrameMode.DEAD_BLOCK;
 						this.changeSet.add(state, '' + alive, 1, -1);
 
 						// If no errors were thrown, find the following
@@ -691,25 +721,25 @@ export class Parser implements TranslateConfig {
 					} catch(err) { }
 				}
 			} else {
-				parent.mode = ConditionMode.NONE;
+				parent.mode = FrameMode.NONE;
 			}
 		}
 
 		// Handle a just parsed, conditionally compiled curly brace
 		// delimited block.
 
-		if(token == '}' && parent && parent.mode != ConditionMode.NONE) {
-			const alive = parent.mode == ConditionMode.ALIVE_BLOCK;
+		if(token == '}' && parent && parent.mode != FrameMode.NONE) {
+			const alive = parent.mode == FrameMode.ALIVE_BLOCK;
 			parent.wasAlive = parent.wasAlive || alive;
 
 			if(alive) {
 				// Set mode for next block in case of an "else" statement.
-				parent.mode = ConditionMode.DEAD_BLOCK;
+				parent.mode = FrameMode.DEAD_BLOCK;
 			} else {
 				// Remove dead code.
 				this.changeSet.add(state, '', 1, -1);
 				// Prepare for an "else" statement.
-				if(!parent.wasAlive) parent.mode = ConditionMode.ALIVE_BLOCK;
+				if(!parent.wasAlive) parent.mode = FrameMode.ALIVE_BLOCK;
 			}
 
 			/** Match a following "else" statement followed by an "if" or
@@ -720,7 +750,7 @@ export class Parser implements TranslateConfig {
 				parent.conditionStart = state.endOffset! + elseMatch[0].length - 1;
 				stack.track(depth - 1);
 			} else {
-				parent.mode = ConditionMode.NONE;
+				parent.mode = FrameMode.NONE;
 			}
 		}
 
