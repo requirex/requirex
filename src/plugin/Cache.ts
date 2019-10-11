@@ -2,6 +2,7 @@ import { FetchOptions, FetchHeaders, FetchResponse } from '../fetch';
 import { Record, ModuleFormat } from '../Record';
 import { skipSlashes } from '../URL';
 import { Loader } from '../Loader';
+import { SourceMap } from '../SourceMap';
 import { features, origin } from '../platform';
 
 const nodeModules = '/node_modules/';
@@ -9,6 +10,7 @@ const nodeModules = '/node_modules/';
 const prefixMeta = 'requirex:meta:';
 const prefixText = 'requirex:text:';
 const prefixTrans = 'requirex:transpiled:';
+const prefixMap = 'requirex:sourcemap:';
 
 export interface CacheMeta {
 	ok: boolean;
@@ -239,6 +241,12 @@ export class FetchCache {
 					record.depList = meta.deps || [];
 					text = trans;
 				}
+
+				const map = storage.getItem(prefixMap + record.resolvedKey);
+
+				if(map) {
+					record.sourceMap = new SourceMap(record.resolvedKey, map);
+				}
 			}
 
 			record.sourceCode = text;
@@ -263,6 +271,13 @@ export class FetchCache {
 			const data = JSON.stringify(meta);
 			storage.setItem(metaKey, data);
 			storage.setItem(prefixTrans + record.resolvedKey, text);
+
+			if(record.sourceMap) {
+				storage.setItem(
+					prefixMap + record.resolvedKey,
+					JSON.stringify(record.sourceMap.json)
+				);
+			}
 		}
 	}
 
