@@ -1,6 +1,6 @@
 import { URL } from './URL';
 import { encode64 } from '@lib/base64';
-import { decodeVLQ } from '@lib/base64-vlq';
+import { encodeVLQ, decodeVLQ } from '@lib/base64-vlq';
 import { ChangeSet } from './ChangeSet';
 
 /** See https://sourcemaps.info/spec.html */
@@ -35,7 +35,7 @@ export class SourceMap {
 			const spec = keyTbl ? keyTbl[key] : emptySpec;
 
 			sources[num] = spec.key || key;
-			content[num] = spec.code || null;
+			content[num] = spec.code || content[num] || null;
 		}
 
 		json.sourcesContent = content;
@@ -144,7 +144,14 @@ export class SourceMap {
 		return this;
 	}
 
-	unpatchInput(changeSet: ChangeSet) {}
+	unpatchInput(changeSet: ChangeSet) {
+		const map = this.json.mappings;
+		const patch = changeSet.patches[0];
+
+		if(patch) {
+			this.json.mappings = encodeVLQ([0, 0, patch.endRow, patch.endCol]) + (map.charAt(0) == ';' ? '' : ',') + map;
+		}
+	}
 
 	encodeURL() {
 		return 'data:application/json;charset=utf-8;base64,' + encode64(JSON.stringify(this.json));
