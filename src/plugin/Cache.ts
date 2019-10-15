@@ -7,11 +7,6 @@ import { features, origin } from '../platform';
 
 const nodeModules = '/node_modules/';
 
-const prefixMeta = 'requirex:meta:';
-const prefixText = 'requirex:text:';
-const prefixTrans = 'requirex:transpiled:';
-const prefixMap = 'requirex:sourcemap:';
-
 export interface CacheMeta {
 	ok: boolean;
 	status?: number;
@@ -29,33 +24,126 @@ function subClone<Type extends Object>(obj: Type): Type {
 	return new (Child as any)();
 }
 
+const enum StoreKind {
+	META = 0,
+	SOURCE,
+	TRANSPILED,
+	SOURCEMAP
+}
+
+const storeKind = ['meta', 'source', 'transpiled', 'sourcemap'];
+
+interface Store {
+	read(kind: StoreKind, key: string): Promise<string>;
+	write(kind: StoreKind, key: string, data: string): void;
+}
+
+function buildKey(kind: StoreKind, key: string) {
+	return key.replace(/#.*/, '') + '!' + storeKind[kind];
+}
+
+class CacheStore implements Store {
+
+	constructor() {
+		this.ready = window.caches.open('RequireX');
+	}
+
+	read(kind: StoreKind, key: string) {
+		const result = this.ready.then(
+			(cache) => cache.match(buildKey(kind, key))
+		).then(
+			(res) => res ? res.text() : Promise.reject(res)
+		);
+
+		return result;
+	}
+
+	write(kind: StoreKind, key: string, data: string) {
+		this.ready.then((cache) => {
+			cache.put(buildKey(kind, key), new Response(data))
+		});
+	}
+
+	ready: Promise<Cache>;
+
+}
+
+class LocalStore implements Store {
+
+	constructor() {
+		this.storage = window.localStorage;
+	}
+
+	read(kind: StoreKind, key: string) {
+		const result = this.storage.getItem('requirex:' + buildKey(kind, key));
+		return result === null ? Promise.reject(result) : Promise.resolve(result);
+	}
+
+	write(kind: StoreKind, key: string, data: string) {
+		// Avoid filling localStorage quota with large files.
+		// Better latency from caching many small files is more important.
+		if(data.length < 500000) {
+			this.storage.setItem('requirex:' + buildKey(kind, key), data);
+		}
+	}
+
+	storage: Storage;
+
+}
+
+function checkRedirect(storage: Store, resolvedKey: string): Promise<CacheMeta | string> {
+	return storage.read(StoreKind.META, resolvedKey).then((data) => {
+		const meta = JSON.parse(data);
+
+		if(meta && meta.url != resolvedKey) return checkRedirect(storage, meta.url);
+		return meta;
+	}).catch(() => resolvedKey);
+}
+
 // TODO: Storage "polyfill" for Node, using require.resolve('requirex/cache') or os.tmpdir()
+// class NodeStore {}
 
 export class FetchCache {
 
 	constructor(private loader: Loader) {
-		if(!features.isNode && typeof (window) == 'object') {
-			this.storage = window.localStorage;
+		if(features.isNode) {
+			// this.storage = new NodeStore();
+		} else if(typeof window == 'object') {
+			if(typeof window.caches == 'object') {
+				this.storage = new CacheStore();
+			} else if(typeof window.localStorage == 'object') {
+				this.storage = new LocalStore();
+			}
 		}
 	}
 
+	store(resolvedKey: string): Promise<undefined>;
+	store(resolvedKey: string, res: FetchResponse, isHead?: boolean): Promise<FetchResponse>;
 	store(resolvedKey: string, res?: FetchResponse, isHead?: boolean) {
 		const storage = this.storage;
+		if(!storage) return Promise.resolve(res);
+
 		const finalKey = (res && decodeURI(res.url)) || resolvedKey;
 
-		if(storage) {
-			if(!this.metaTbl[resolvedKey] || !this.metaTbl[finalKey]) {
-				const meta = JSON.parse(
-					storage.getItem(prefixMeta + resolvedKey) ||
-					storage.getItem(prefixMeta + finalKey) ||
-					'null'
-				);
+		const snapshotReady = (
+			this.metaTbl[resolvedKey] || this.metaTbl[finalKey] ?
+			Promise.resolve(res) : (
+				storage.read(StoreKind.META, resolvedKey).catch(
+					() => storage.read(StoreKind.META, finalKey)
+				).then((data) => {
+					const meta = JSON.parse(data);
+					this.metaTbl[resolvedKey] = meta;
+					this.metaTbl[finalKey] = meta;
 
-				this.metaTbl[resolvedKey] = meta;
-				this.metaTbl[finalKey] = meta;
-				this.textTbl[finalKey] = storage.getItem(prefixText + finalKey);
-			}
+					return storage.read(StoreKind.SOURCE, finalKey);
+				}).then((text) => {
+					this.textTbl[finalKey] = text;
+					return res;
+				}).catch(() => res)
+			)
+		);
 
+		snapshotReady.then(() => {
 			let ok = true;
 			let status: number | undefined;
 			const headers: FetchHeaders = {};
@@ -77,21 +165,17 @@ export class FetchCache {
 			const data = JSON.stringify(meta);
 
 			// Store metadata using both original and possibly redirected URL.
-			storage.setItem(prefixMeta + resolvedKey, data);
-			storage.setItem(prefixMeta + meta.url, data);
+			storage.write(StoreKind.META, resolvedKey, data);
+			storage.write(StoreKind.META, meta.url, data);
 
 			if(res && !isHead) {
 				res.text().then((text: string) => {
-					// Avoid filling localStorage quota with large files.
-					// Better latency from caching many small files is more important.
-					if(text.length < 500000) {
-						storage.setItem(prefixText + meta!.url, text);
-					}
+					storage.write(StoreKind.SOURCE, meta!.url, text);
 				});
 			}
-		}
+		});
 
-		return res;
+		return snapshotReady;
 	}
 
 	fetchRemote(
@@ -100,7 +184,6 @@ export class FetchCache {
 		bust: string,
 		isHead: boolean | undefined
 	) {
-		// console.log('fetchRemote', resolvedKey);
 		const key = resolvedKey + (
 			bust && (resolvedKey.indexOf('?') >= 0 ? '&' : '?') + bust
 		);
@@ -124,42 +207,50 @@ export class FetchCache {
 	}
 
 	fetchStorage(resolvedKey: string, options: FetchOptions, bust: string, isHead?: boolean) {
-		// console.log('fetchStorage', resolvedKey);
 		const originalKey = resolvedKey;
 		const storage = this.storage;
-		let fetched: Promise<FetchResponse> | undefined;
+		let fetched: Promise<FetchResponse | null>;
 		let meta: CacheMeta | null | undefined;
 
 		if(storage) {
-			while(1) {
-				meta = JSON.parse(storage.getItem(prefixMeta + resolvedKey) || 'null');
-
-				if(meta && meta.url != resolvedKey) {
-					resolvedKey = meta.url;
-				} else break;
-			}
-
-			if(meta) {
-				let text = isHead || !meta.ok ? '' : storage.getItem(prefixText + meta.url);
-
-				if(text || text === '') {
-					const res = new FetchResponse(
-						meta.status,
-						meta.url,
-						meta.headers,
-						text
-					);
-
-					this.metaTbl[originalKey] = meta;
-					this.metaTbl[resolvedKey] = meta;
-					this.textTbl[resolvedKey] = text;
-
-					fetched = Promise.resolve(res);
+			fetched = checkRedirect(storage, resolvedKey).then((result) => {
+				if(typeof result == 'string') {
+					resolvedKey = result;
+					return null;
 				}
-			}
+
+				meta = result;
+				if(meta.url) resolvedKey = meta.url;
+
+				return (
+					isHead || !meta.ok ? '' :
+					storage.read(StoreKind.SOURCE, meta.url)
+				) as Promise<string | null> | string;
+			}).then((text) => {
+				if(!meta || !(text || text === '')) return null;
+
+				const res = new FetchResponse(
+					meta.status,
+					meta.url,
+					meta.headers,
+					text
+				);
+
+				this.metaTbl[originalKey] = meta;
+				this.metaTbl[resolvedKey] = meta;
+				this.textTbl[resolvedKey] = text;
+
+				return res;
+			}).catch(
+				() => null
+			);
+		} else {
+			fetched = Promise.resolve(null);
 		}
 
-		return fetched || this.fetchRemote(resolvedKey, options, bust, isHead);
+		return fetched.then((res) =>
+			res || this.fetchRemote(resolvedKey, options, bust, isHead)
+		);
 	}
 
 	isLocal(resolvedKey: string) {
@@ -180,7 +271,6 @@ export class FetchCache {
 	}
 
 	fetch(resolvedKey: string, options?: FetchOptions) {
-		// console.log('fetch', resolvedKey);
 		options = options || {};
 		const isHead = options.method == 'HEAD';
 
@@ -216,10 +306,13 @@ export class FetchCache {
 
 		if(record.sourceCode) {
 			if(storage && !this.dataTbl[record.resolvedKey]) {
-				this.store(record.resolvedKey);
-				storage.setItem(prefixText + record.resolvedKey, record.sourceCode);
+				fetched = this.store(record.resolvedKey).then(() => {
+					storage.write(StoreKind.SOURCE, record.resolvedKey, record.sourceCode)
+					return record.sourceCode;
+				});
+			} else {
+				fetched = Promise.resolve(record.sourceCode);
 			}
-			fetched = Promise.resolve(record.sourceCode);
 		} else {
 			fetched = this.loader.fetch(record.resolvedKey).then((res: FetchResponse) => {
 				if(res.url) record.resolvedKey = decodeURI(res.url);
@@ -228,28 +321,27 @@ export class FetchCache {
 		}
 
 		return fetched.then((text: string) => {
-			let meta: CacheMeta | undefined = this.metaTbl[record.resolvedKey];
+			const meta: CacheMeta | undefined = this.metaTbl[record.resolvedKey];
+
+			record.sourceCode = text;
 
 			// After remote fetch, compare cached and new version.
 			// If they are identical, re-use old metadata and transpiled code.
 
 			if(storage && meta && text == this.textTbl[record.resolvedKey]) {
-				const trans = storage.getItem(prefixTrans + record.resolvedKey);
+				return Promise.all([
+					storage.read(StoreKind.TRANSPILED, record.resolvedKey).catch(() => {}),
+					storage.read(StoreKind.SOURCEMAP, record.resolvedKey).catch(() => {})
+				]).then(([trans, map]) => {
+					if(trans) {
+						record.format = meta!.format || record.format;
+						record.depList = meta!.deps || [];
+						record.sourceCode = trans;
 
-				if(trans) {
-					record.format = meta.format || record.format;
-					record.depList = meta.deps || [];
-					text = trans;
-				}
-
-				const map = storage.getItem(prefixMap + record.resolvedKey);
-
-				if(map) {
-					record.sourceMap = new SourceMap(record.resolvedKey, map);
-				}
+						if(map) record.sourceMap = new SourceMap(record.resolvedKey, map);
+					}
+				});
 			}
-
-			record.sourceCode = text;
 		});
 	}
 
@@ -257,31 +349,31 @@ export class FetchCache {
 		const storage = this.storage;
 		const text = record.sourceCode;
 
-		if(storage && text && text.length < 500000) {
-			const metaKey = prefixMeta + record.resolvedKey;
-			const meta: CacheMeta = JSON.parse(storage.getItem(metaKey) || 'null');
-			if(!meta) return;
+		if(storage && text) {
+			storage.read(StoreKind.META, record.resolvedKey).then((data: string) => {
+				const meta: CacheMeta = JSON.parse(data);
 
-			meta.format = record.format;
-			meta.deps = record.depList;
+				meta.format = record.format;
+				meta.deps = record.depList;
 
-			// TODO: Maybe call a hook in the format plugin so it can store
-			// any additional metadata.
+				// TODO: Maybe call a hook in the format plugin so it can store
+				// any additional metadata.
 
-			const data = JSON.stringify(meta);
-			storage.setItem(metaKey, data);
-			storage.setItem(prefixTrans + record.resolvedKey, text);
+				storage.write(StoreKind.META, record.resolvedKey, JSON.stringify(meta));
+				storage.write(StoreKind.TRANSPILED, record.resolvedKey, text);
+			}).catch(() => {});
 
 			if(record.sourceMap) {
-				storage.setItem(
-					prefixMap + record.resolvedKey,
+				storage.write(
+					StoreKind.SOURCEMAP,
+					record.resolvedKey,
 					JSON.stringify(record.sourceMap.json)
 				);
 			}
 		}
 	}
 
-	storage?: Storage;
+	storage: Store;
 
 	headTbl: { [resolvedKey: string]: Promise<FetchResponse> } = {};
 	dataTbl: { [resolvedKey: string]: Promise<FetchResponse> } = {};
