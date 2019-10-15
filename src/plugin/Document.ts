@@ -1,6 +1,7 @@
 import { URL } from '../URL';
 import { Record, DepRef } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
+import { ChangeSet } from '../ChangeSet';
 import { origin, getTags, globalEnv, assign, assignReversible } from '../platform';
 
 interface TreeItem<Type> extends Array<Node | TreeItem<Type>> {
@@ -19,6 +20,28 @@ export const enum NodeType {
 	DOCUMENT_NODE = 9,
 	DOCUMENT_TYPE_NODE = 10,
 	DOCUMENT_FRAGMENT_NODE = 11
+}
+
+const trackResult: [number, number] = [0, 0];
+
+function trackPos(html: string | null, row: number, col: number) {
+	let rowOffset = 0;
+	let pos = 0;
+
+	html = html || '';
+
+	while((pos = html.indexOf('\n', pos) + 1)) {
+		++row;
+		col = 0;
+		rowOffset = pos;
+	}
+
+	col += html.length - rowOffset;
+
+	trackResult[0] = row;
+	trackResult[1] = col;
+
+	return html;
 }
 
 /** Store paths to specific nodes in a document and emit the entire document
@@ -52,7 +75,7 @@ class NodeTree<Type> {
 		while((node = stack.pop()!)) {
 			// Check if node is an already found child.
 			let num = item.length;
-			while(--num && node != (item[num] as TreeItem<Type>)[0]) {}
+			while(--num && node != (item[num] as TreeItem<Type>)[0]) { }
 
 			if(!num) {
 				// Append previously missing child.
@@ -66,30 +89,14 @@ class NodeTree<Type> {
 		item.data = data;
 	}
 
-	emit() {
+	emit(emitData: (data: Type, row: number, col: number) => string) {
 		let result = '';
 		let stack = [this.root, 0, ''];
 		let stackPos = 6;
 		let html: string;
 		let row = 0;
 		let col = 0;
-
-		function trackPos(html?: string | null) {
-			let rowOffset = 0;
-			let pos = 0;
-
-			html = html || '';
-
-			while((pos = html.indexOf('\n', pos) + 1)) {
-				++row;
-				col = 0;
-				rowOffset = pos;
-			}
-
-			col += html.length - rowOffset;
-
-			return html;
-		}
+		let chunk: string | null;
 
 		while(stackPos -= 3) {
 			const item = stack[stackPos - 3] as TreeItem<Type>;
@@ -98,7 +105,7 @@ class NodeTree<Type> {
 			const count = children.length;
 
 			for(let childNum = stack[stackPos - 2] as number; childNum < count; ++childNum) {
-				let chunk: string | null = '';
+				chunk = '';
 				node = children[childNum];
 
 				switch(node.nodeType) {
@@ -107,10 +114,10 @@ class NodeTree<Type> {
 						const element = node as HTMLElement;
 						let num = item.length;
 
-						while(--num && node != (item[num] as TreeItem<Type>)[0]) {}
+						while(--num && node != (item[num] as TreeItem<Type>)[0]) { }
 
 						if(!num) {
-							chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + element.outerHTML;
+							chunk = element.outerHTML;
 						} else {
 							const branch = item[num] as TreeItem<Type>;
 							html = (element.cloneNode(false) as HTMLElement).outerHTML;
@@ -119,9 +126,9 @@ class NodeTree<Type> {
 							const close = html.substr(split);
 
 							if(branch.data) {
-								chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + open + 'FOO' + close;
+								chunk = open + emitData(branch.data, row, col + open.length) + close;
 							} else {
-								chunk = '(' + (row + 1) + ', ' + (col + 1) + ')' + open;
+								chunk = open;
 
 								stack[stackPos - 2] = childNum + 1;
 
@@ -143,14 +150,24 @@ class NodeTree<Type> {
 
 						chunk = '<!--' + node.nodeValue + '-->';
 						break;
+
+					case NodeType.DOCUMENT_TYPE_NODE:
+
+						// Emit doctype and a line break. Seems that actual
+						// whitespace before root element cannot be recovered?
+						if(typeof XMLSerializer == 'function') {
+							chunk = new XMLSerializer().serializeToString(node) + '\n';
+						}
+						break;
+
 				}
 
-				if(childNum == count) {
-					chunk += stack[stackPos - 1] as string;
-				}
-
-				result += trackPos(chunk);
+				result += trackPos(chunk, row, col);
+				[row, col] = trackResult;
 			}
+
+			chunk = stack[stackPos - 1] as string;
+			if(chunk) result += trackPos(chunk, row, col);
 		}
 
 		return result;
@@ -178,12 +195,12 @@ export class Document implements LoaderPlugin {
 
 			function check() {
 				const ready = document.readyState;
-			
+
 				if(!resolved && (!ready || ready == 'complete' || ready == almostReady)) {
 					resolve();
 					resolved = true;
 				}
-			
+
 				return resolved;
 			}
 
@@ -205,7 +222,6 @@ export class Document implements LoaderPlugin {
 	discover(record: Record) {
 		const tree = new NodeTree<DepRef>(document);
 		const key = origin + window.location.pathname + window.location.search;
-		const inlineList: DepRef[] = [];
 		let inlineCount = 0;
 
 		for(let element of [].slice.call(getTags && getTags('script')) as HTMLScriptElement[]) {
@@ -227,7 +243,7 @@ export class Document implements LoaderPlugin {
 						sourceKey: URL.resolve(key, 'Script%20' + inlineCount),
 						// Remove leading whitespace to ensure a possible
 						// strict pragma remains on the first line.
-						sourceCode: code.replace(/^\s+/, ''),
+						sourceCode: code,
 						// Inject transpiled inline scripts in order without
 						// a wrapper function to ensure they get evaluated
 						// in the correct environment.
@@ -249,14 +265,35 @@ export class Document implements LoaderPlugin {
 					// Trace script element location for source map.
 					tree.add(element, inline);
 
-					inlineList[inlineCount - 1] = inline;
 					record.addDep(URL.resolve(key, 'Inline%20' + inlineCount + '#.ts'), inline);
 				}
 			}
 		}
 
 		if(inlineCount) {
-			const original = tree.emit();
+			const inlineList: DepRef[] = [];
+			const original = tree.emit((inline: DepRef, row: number, col: number) => {
+				let code = inline.sourceCode || '';
+				let offset = code.match(/^\s*/)![0].length;
+
+				trackPos(code.substr(0, offset), row, col);
+				[row, col] = trackResult;
+
+				inline.changeSet = new ChangeSet();
+				inline.changeSet.add({
+					startOffset: 0,
+					startRow: 0,
+					startCol: 0,
+					endOffset: 0,
+					endRow: row,
+					endCol: col
+				}, '');
+
+				inline.sourceCode = code.substr(offset);
+				inlineList.push(inline);
+
+				return code;
+			});
 
 			for(let inline of inlineList) {
 				inline.sourceOriginal = original;

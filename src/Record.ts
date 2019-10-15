@@ -36,6 +36,7 @@ export interface DepRef {
 	sourceKey?: string;
 	sourceCode?: string;
 	sourceOriginal?: string;
+	changeSet?: ChangeSet;
 	eval?: (record: Record) => void;
 }
 
@@ -206,6 +207,9 @@ export class Record {
 	sourceKey?: string;
 	sourceMap?: SourceMap;
 	sourceOriginal?: string;
+
+	/** Changes already applied to the source code. */
+	changeSet?: ChangeSet;
 
 	/** Optional custom evaluation function. For example HTML inline scripts
 	  * cannot use default eval() because they need a shared scope. */
