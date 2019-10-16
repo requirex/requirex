@@ -15,7 +15,8 @@ const sepAfter = makeTable(sepList, '');
 sepBefore[':'] = true;
 
 /** Create a regexp for matching string or comment start tokens,
-  * curly braces (to track nested blocks) and given keywords.
+  * angle brackets opening JSX elements, curly braces
+  * (to track nested blocks) and given keywords.
   *
   * @param keywords Separated by pipe characters, may use regexp syntax. */
 
@@ -26,7 +27,8 @@ function matchTokens(keywords: string) {
 /** Match characters relevant when inside JSX elements. */
 const reXML = /[<>"'`{]/g;
 
-/** Match a function call with a non-numeric literal as the first argument. */
+/** Match a function call with a non-numeric literal as the first argument
+  * (to detect AMD define calls). */
 const reCallLiteral = /^\s*\(\s*["'`\[{_$A-Za-z]/;
 
 // TODO: What types are valid for the first argument to System.register?
@@ -65,9 +67,13 @@ const reBeforeLiteral = new RegExp(
   * A slash next to one of the brackets is optional. */
 const reElement = /<\/?\s*([^ !"#%&'()*+,./:;<=>?@[\\\]^`{|}~]+)(\s+|\/?>)/;
 
-/** Match any potential function call or assignment, including suspicious comments before parens. */
+/** Match any potential function call or assignment, including suspicious
+  * comments before parens. Matching expressions should have no side effects
+  * (except calling getters) and evaluation at compile time
+  * (inside a try block) is safe. */
 const reCallAssign = /(\*\/|[^-\t\n\r !"#%&'(*+,./:;<=>?@[\\^`{|~])\s*\(|[^!=]=[^=]|\+\+|--/;
 
+/** Match the start of a code block surrounded by curly braces. */
 const reBlock = new RegExp('^' + reComments + '\\{');
 
 /** Match an else statement after an if block. */
@@ -100,6 +106,9 @@ const enum FrameMode {
 	FROM_JS
 }
 
+/** Represents one nesting level (code block, paren or JSX element)
+  * in the parser state stack. */
+
 class StackFrame implements Patch {
 
 	constructor() {
@@ -124,12 +133,17 @@ class StackFrame implements Patch {
 
 	rootToken: string;
 
+	/** If enabled, track locations of surrounding braces, brackets and parens. */
 	tracking?: boolean;
+	/** Offset in source code to brace, bracket or paren starting this stack frame. */
 	startOffset = 0;
 	startRow = 0;
+	/** NOTE: tab size = 1 for source map support. */
 	startCol = 0;
+	/** Offset in source code to brace, bracket or paren ending this stack frame. */
 	endOffset = 0;
 	endRow = 0;
+	/** NOTE: tab size = 1 for source map support. */
 	endCol = 0;
 
 	/** Semantic meaning of the stack frame if relevant. */
@@ -272,7 +286,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 	const text = parser.text;
 	let row = 0;
 	let rowOffset = 0;
-	/** Nesting depth inside curly brace delimited blocks. */
+	/** Nesting depth inside curly brace delimited blocks, JSX elements... */
 	let depth = 0;
 	let state: StackFrame;
 	let match: RegExpExecArray | null;

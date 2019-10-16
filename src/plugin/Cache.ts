@@ -7,15 +7,27 @@ import { features, origin } from '../platform';
 
 const nodeModules = '/node_modules/';
 
+/** Metadata stored for every cached file. */
+
 export interface CacheMeta {
+	/** HTTP(S) fetch result success flag. */
 	ok: boolean;
+	/** HTTP status code. */
 	status?: number;
+	/** Response URL (including possible redirection). */
 	url: string;
+	/** Timestamp when the file was fetched, for future use. */
 	stamp: number;
+	/** HTTP response headers, for future use. */
 	headers: FetchHeaders;
+	/** JavaScript module format reported by later discovery step. */
 	format?: ModuleFormat;
+	/** Dependencies reported by later discovery step. */
 	deps?: string[];
 }
+
+/** Clone an object without invoking getters, by subclassing it.
+  * Allows setting custom properties on internal objects. */
 
 function subClone<Type extends Object>(obj: Type): Type {
 	function Child() {}
@@ -24,6 +36,9 @@ function subClone<Type extends Object>(obj: Type): Type {
 	return new (Child as any)();
 }
 
+/** Type of information associated with a URL, forming with it the key
+  * of a stored key-value pair. */
+
 const enum StoreKind {
 	META = 0,
 	SOURCE,
@@ -31,16 +46,26 @@ const enum StoreKind {
 	SOURCEMAP
 }
 
+/** String tags for types of information attached to URLs, appended to them
+  * to form unique keys for each URL and type combination. */
+
 const storeKind = ['meta', 'source', 'transpiled', 'sourcemap'];
+
+/** Build a unique key for a URL and type of information attached to it. */
+
+function buildKey(kind: StoreKind, key: string) {
+	return key.replace(/#.*/, '') + '!' + storeKind[kind];
+}
+
+/** Generic low level storage interface used by the cache. */
 
 interface Store {
 	read(kind: StoreKind, key: string): Promise<string>;
 	write(kind: StoreKind, key: string, data: string): void;
 }
 
-function buildKey(kind: StoreKind, key: string) {
-	return key.replace(/#.*/, '') + '!' + storeKind[kind];
-}
+/** CacheStorage-based low level API (useful also outside service workers,
+  * likely allows using more space than localStorage). */
 
 class CacheStore implements Store {
 
@@ -68,6 +93,8 @@ class CacheStore implements Store {
 
 }
 
+/** localStorage-based low level API with wide browser support. */
+
 class LocalStore implements Store {
 
 	constructor() {
@@ -90,6 +117,8 @@ class LocalStore implements Store {
 	storage: Storage;
 
 }
+
+/** Follow all redirects for a URL in low level metadata storage. */
 
 function checkRedirect(storage: Store, resolvedKey: string): Promise<CacheMeta | string> {
 	return storage.read(StoreKind.META, resolvedKey).then((data) => {

@@ -4,12 +4,12 @@ export interface Patch {
 
 	startOffset: number;
 	startRow: number;
-	/** Tab size is 1. */
+	/** NOTE: tab size = 1 for source map support. */
 	startCol: number;
 
 	endOffset: number;
 	endRow: number;
-	/** Tab size is 1. */
+	/** NOTE: tab size = 1 for source map support. */
 	endCol: number;
 
 	replacement?: string;
