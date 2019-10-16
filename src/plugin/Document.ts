@@ -265,7 +265,7 @@ export class Document implements LoaderPlugin {
 					// Trace script element location for source map.
 					tree.add(element, inline);
 
-					record.addDep(URL.resolve(key, 'Inline%20' + inlineCount + '#.ts'), inline);
+					record.addDep(URL.resolve(key, 'Inline%20' + inlineCount), inline);
 				}
 			}
 		}
