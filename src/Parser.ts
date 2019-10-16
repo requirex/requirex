@@ -461,6 +461,8 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 					// Pop closing element off the stack.
 					--depth;
 
+					parser.handler(token, depth, pos, last);
+
 					if(state.mode == FrameMode.FROM_JS) {
 						reToken = parser.reToken;
 						isText = false;
@@ -612,7 +614,7 @@ export class Parser implements TranslateConfig {
 		if((token == 'import' || token == 'export') && !depth) {
 			// ES modules contain import and export statements
 			// at the root level scope.
-			record.format = 'ts';
+			record.format = this.hasElements ? 'tsx' : 'ts';
 			return true;
 		}
 
@@ -756,10 +758,20 @@ export class Parser implements TranslateConfig {
 
 		if(
 			!features.isES6 &&
-			(token == '`' || token == 'let' || token == 'const' || token == '=>')
+			(token == '`' || token == 'let' || token == 'const' || token == '=>') &&
+			(!record.format || record.format == 'js')
 		) {
-			record.format = 'ts';
+			record.format = this.hasElements ? 'tsx' : 'ts';
 			this.formatKnown = true;
+		}
+
+		if(token == '>') {
+			this.hasElements = true;
+
+			if(record.format == 'js' || record.format == 'ts') {
+				// JSX element detected, update format.
+				record.format += 'x';
+			}
 		}
 
 		if(!this.formatKnown) {
@@ -787,6 +799,8 @@ export class Parser implements TranslateConfig {
 
 	/** Finished trying to detect the module format? */
 	formatKnown: boolean;
+
+	hasElements: boolean;
 
 	/** Match string or comment start tokens, curly braces and some keywords. */
 	reToken = matchTokens('module|require|define|System|import|exports?|if|NODE_ENV|let|const|=>');

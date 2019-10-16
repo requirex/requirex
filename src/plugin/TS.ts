@@ -13,45 +13,87 @@ declare module '../Record' {
 
 const transpileFormats = makeTable('ts tsx jsx d.ts');
 
-function createHost(loader: Loader, ts: typeof Lib): Lib.LanguageServiceHost {
-	return ({
-		getCompilationSettings: () => ({
+class Host implements Lib.LanguageServiceHost {
+
+	constructor(
+		private loader: Loader,
+		private ts: typeof Lib
+	) {}
+
+	getCompilationSettings() {
+		const ts = this.ts;
+
+		return {
 			allowJs: true,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
+			/** Allow transpiling JS -> JS (identical input and output paths). */
+			suppressOutputPathCheck: true,
 			sourceMap: true,
 			target: ts.ScriptTarget.ES5,
 			module: ts.ModuleKind.CommonJS
 			// module: ts.ModuleKind.AMD
 			// module: ts.ModuleKind.UMD
 			// module: ts.ModuleKind.System
-		}),
-		getScriptFileNames: () => {
-			const result: string[] = [];
+		};
+	}
 
-			for(let key of keys(loader.records)) {
-				const record = loader.records[key];
+	getScriptFileNames() {
+		return keys(this.records);
+	}
 
-				if(transpileFormats[record.format!] || record.tsSnapshot) {
-					result.push(key);
-				}
-			}
+	getScriptVersion(key: string) {
+		return '0';
+	}
 
-			return result;
-		},
-		getScriptVersion: (key: string) => {
-			return '0';
-		},
-		getScriptSnapshot: (key: string) => {
-			const record = loader.records[key];
+	getScriptSnapshot(key: string) {
+		const record = this.records[key];
 
-			if(record) return record.tsSnapshot || (
-				record.tsSnapshot = ts.ScriptSnapshot.fromString(record.sourceCode)
+		if(record) {
+			return record.tsSnapshot || (
+				record.tsSnapshot = this.ts.ScriptSnapshot.fromString(record.sourceCode)
 			);
-		},
-		getCurrentDirectory: () => '',
-		getDefaultLibFileName: () => loader.resolveSync('typescript/lib/lib.d.ts')
-	});
+		}
+	}
+
+	getCurrentDirectory() {
+		return '';
+	}
+
+	getDefaultLibFileName() {
+		return this.loader.resolveSync('typescript/lib/lib.d.ts');
+	}
+
+	records: { [resolvedKey: string]: Record };
+
+}
+
+function transformKey(record: Record) {
+	const format = record.format!;
+	let key = record.resolvedKey;
+	const extension = key.match(/(\.[a-z]+)?$/)![0];
+
+	if(!extension) {
+		key += '.' + (transpileFormats[format] ? format : 'js');
+	} else if(extension != format && (format == 'jsx' || format == 'tsx')) {
+		key = key.substr(0, key.length - extension.length + 1) + format;
+	}
+
+	return key;
+}
+
+function transformKeys(loader: Loader) {
+	const records: { [resolvedKey: string]: Record } = {};
+
+	for(let key of keys(loader.records)) {
+		const record = loader.records[key];
+
+		if(transpileFormats[record.format!] || record.tsSnapshot) {
+			records[transformKey(record)] = record;
+		}
+	}
+
+	return records;
 }
 
 /** TypeScript loader plugin. */
@@ -70,7 +112,7 @@ export class TS implements LoaderPlugin {
 
 		return this.lib.then((ts: typeof Lib) => {
 			if(!this.tsService) {
-				this.tsHost = createHost(this.loader, ts);
+				this.tsHost = new Host(this.loader, ts);
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
 			}
 
@@ -92,16 +134,19 @@ export class TS implements LoaderPlugin {
 
 	translate(record: Record) {
 		if(record.format == 'd.ts') return;
-		const key = record.resolvedKey;
-		const jsKey = record.resolvedKey.replace(/\.[jt]sx?$/, '.js');
+
+		const key = transformKey(record);
+		const jsKey = key.replace(/\.[jt]sx?$/, '.js');
 		const mapKey = jsKey + '.map';
 
 		const keyTbl: { [key: string]: SourceMapSpec } = {};
 
 		keyTbl[key] = {
-			key: record.sourceKey || key,
+			key: record.sourceKey || record.resolvedKey,
 			code: record.sourceOriginal
 		};
+
+		this.tsHost.records = transformKeys(this.loader);
 
 		for(let info of this.tsService.getEmitOutput(key).outputFiles) {
 			if(info.name == jsKey) {
@@ -123,7 +168,7 @@ export class TS implements LoaderPlugin {
 	instantiate(record: Record) { }
 
 	lib: Promise<typeof Lib>;
-	tsHost: Lib.LanguageServiceHost;
+	tsHost: Host;
 	tsService: Lib.LanguageService;
 
 }
