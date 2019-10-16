@@ -88,6 +88,7 @@ export class Node implements LoaderPlugin {
 				Type.prototype = Base.prototype;
 				Class.prototype = new (Type as any)();
 			},
+			inspect: (val: any) => JSON.stringify(val),
 			deprecate: (func: Function, msg: string) => {
 				return function(this: any) {
 					console.log('Deprecated: ' + msg);
