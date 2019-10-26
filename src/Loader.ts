@@ -378,7 +378,7 @@ export class Loader implements LoaderPlugin {
 			}).then(() => Promise.all(record.depList.map(
 				// Resolve and translate each imported dependency.
 				(key: string) => this.discoverImport(key, record, instantiate, base!)
-			))).then(() => base!);
+			))).then(() => record);
 		}
 
 		// Store import record in table and wait for it to be translated.
