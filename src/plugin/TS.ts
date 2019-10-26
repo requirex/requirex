@@ -25,6 +25,7 @@ class Host implements Lib.LanguageServiceHost {
 
 		return {
 			allowJs: true,
+			esModuleInterop: true,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			/** Allow transpiling JS -> JS (identical input and output paths). */
