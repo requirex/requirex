@@ -107,10 +107,10 @@ export function assign(
 		let value = src[name];
 
 		if(depth && typeof value == 'object' && !(value instanceof Array)) {
-			value = assign(dst[name] || {}, value, depth - 1);
+			value = assign(dst[name] || (dst[name] = {}), value, depth - 1);
+		} else {
+			dst[name] = value;
 		}
-
-		dst[name] = value;
 	}
 
 	return(dst);
