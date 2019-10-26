@@ -304,7 +304,7 @@ export class Document implements LoaderPlugin {
 	instantiate(record: Record) {
 		// Execute scripts in order of appearance.
 		for(let key of record.depList) {
-			const dep = record.depTbl[key];
+			const dep = record.depTbl[key]!;
 			if(dep.record) this.loader.instantiate(dep.record);
 		}
 	}

@@ -162,7 +162,9 @@ export class TS implements LoaderPlugin {
 			}
 		}
 
-		record.markDevDeps('d.ts');
+		// Turn imports in TypeScript code into dev dependencies.
+		// Actual run-time dependencies will be detected in transpiled output.
+		record.setDepsDev();
 	}
 
 	/** Dummy instantiate for d.ts files. */

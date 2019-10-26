@@ -79,24 +79,21 @@ export class Record {
 		this.depTbl[key] = ref;
 	}
 
-	markDevDeps(format: string) {
+	/** Turn all dependencies detected so far into devDependencies. */
+
+	setDepsDev() {
 		let depList = this.depList;
 		this.depList = [];
 
 		for(let key of depList) {
 			const dep = this.depTbl[key];
 
-			if(dep && dep.format == format) {
+			this.depNumTbl[key] = void 0;
+
+			if(dep && !this.devDepTbl[key]) {
+				this.devDepTbl[key] = dep;
 				this.devDepList.push(key);
-			} else {
-				this.depList.push(key);
 			}
-		}
-
-		depList = this.depList;
-
-		for(let num = 0; num < depList.length; ++num) {
-			this.depNumTbl[depList[num]] = num;
 		}
 	}
 
@@ -186,8 +183,9 @@ export class Record {
 	  * Indices 0-2 reference require, exports, module. */
 	depNumList: number[] = [];
 	/** Map of import names to their load records or exported objects. */
-	depTbl: { [key: string]: DepRef } = {};
-	depNumTbl: { [key: string]: number } = {};
+	depTbl: { [key: string]: DepRef | undefined } = {};
+	depNumTbl: { [key: string]: number | undefined } = {};
+	devDepTbl: { [key: string]: DepRef | undefined } = {};
 	devDepList: string[] = [];
 
 	globalTbl: { [name: string]: any } = {};

@@ -75,7 +75,7 @@ function getAllDeps(
 	depList.push(record);
 
 	for(let name of record.depList) {
-		const dep = record.depTbl[name].record;
+		const dep = record.depTbl[name]!.record;
 
 		if(dep && !depTbl[dep.resolvedKey]) getAllDeps(dep, depTbl, depList);
 	}
@@ -555,7 +555,7 @@ export class Loader implements LoaderPlugin {
 						const deps: string[] = [];
 
 						for(let depName of record.depList.slice(0).sort()) {
-							const dep = record.depTbl[depName].record;
+							const dep = record.depTbl[depName]!.record;
 							deps.push(str(depName) + ': ' + (dep ? dep.num : -1));
 						}
 

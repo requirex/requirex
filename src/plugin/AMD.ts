@@ -215,7 +215,7 @@ export class AMD implements LoaderPlugin {
 			// Return internal deps as-is.
 			if(num < 3) return dep;
 
-			const ref = record.depTbl[dep];
+			const ref = record.depTbl[dep]!;
 			return ref.module ? ref.module.exports : this.loader.instantiate(ref.record!);
 		});
 

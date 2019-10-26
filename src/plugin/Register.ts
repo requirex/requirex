@@ -43,7 +43,7 @@ export class Register implements LoaderPlugin {
 		// TODO: Handle spec.exports!
 
 		for(let num = 0; num < record.depNumList.length; ++num) {
-			const ref = record.depTbl[record.depList[record.depNumList[num] - 3]];
+			const ref = record.depTbl[record.depList[record.depNumList[num] - 3]]!;
 			const dep = ref.module ? ref.module.exports : this.loader.instantiate(ref.record!);
 
 			if(spec.setters && spec.setters[num]) {
