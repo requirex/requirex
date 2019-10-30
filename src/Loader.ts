@@ -100,6 +100,10 @@ function handleExtension(loader: Loader, key: string, ref?: DepRef) {
 	return key;
 }
 
+function appendSlash(key: string) {
+	return key.replace(/([^/]|^)$/, '$1/');
+}
+
 function fetchTranslate(loader: Loader, instantiate: true, importKey: string, parent?: string): Promise<any>;
 function fetchTranslate(loader: Loader, instantiate: false, importKey: string, parent?: string): Promise<Record>;
 function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string, parent?: string) {
@@ -115,9 +119,13 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		const prepareStackTrace = Error[hook];
 		Error[hook] = (err, stack) => stack;
 
-		parent = URL.fromLocal(
-			(new Error().stack as any as NodeJS.CallSite[])[2].getFileName() || ''
-		);
+		let name = (new Error().stack as any as NodeJS.CallSite[])[2].getFileName();
+
+		if(!name || typeof name != 'string' || name.charAt(0) == '[') {
+			name = appendSlash(loader.cwd);
+		}
+
+		parent = URL.fromLocal(name);
 
 		if(!loader.firstParent) loader.firstParent = parent;
 
@@ -157,10 +165,7 @@ export class Loader implements LoaderPlugin {
 			'/'
 		);
 
-		this.baseURL = (origin &&
-			// TODO: Make sure a slash is added always when missing. Maybe cwd is a drive letter?
-			origin + this.cwd.replace(/([^/]|^)$/, '$1/')
-		);
+		this.baseURL = origin && origin + appendSlash(this.cwd);
 
 		this.config(config);
 	}
