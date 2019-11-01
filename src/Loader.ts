@@ -138,15 +138,7 @@ function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string,
 		(instantiate && loader.registry[resolvedKey] && loader.registry[resolvedKey].exports) ||
 		// Detect and resolve all recursive dependencies.
 		loader.discoverRecursive(resolvedKey, importKey, ref!, instantiate).then(
-			// Instantiate after translating all detected dependencies.
-			// TODO: Make sure this does not get executed multiple times for the same record!
-			(record?: Record) => (record &&
-				Promise.all(record.deepDepList.map(
-					(record: Record) => loader.translate(record).then(() => loader.update(record))
-				)).then(
-					() => instantiate ? loader.instantiate(record) : record
-				)
-			)
+			(record?: Record) => record && record.init(loader, instantiate)
 		)
 	);
 
@@ -200,6 +192,21 @@ export class Loader implements LoaderPlugin {
 
 	getConfig() {
 		return this.currentConfig;
+	}
+
+	eval(code: string, resolvedKey?: string, importKey?: string) {
+		const inline: DepRef = {
+			format: 'js',
+			sourceCode: code,
+			package: this.package
+		};
+
+		importKey = importKey || '[eval]';
+		resolvedKey = resolvedKey || this.baseURL + importKey;
+
+		return this.discoverRecursive(resolvedKey, importKey, inline, true).then(
+			(record?: Record) => record && record.init(this, true)
+		)
 	}
 
 	/** @param key Name of module or file to import, may be a relative path.

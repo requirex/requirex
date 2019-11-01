@@ -1,14 +1,22 @@
 #!/usr/bin/env node
 
-var path = require('path');
 var url = require('..').URL;
+var name = process.argv[2];
+var code;
 
-var resolved = url.fromLocal(path.resolve(process.cwd(), process.argv[2]));
+if(name == '-e') {
+	name = '#';
+	code = process.argv[3];
+}
+
+var resolved = url.fromLocal(
+	require('path').resolve(process.cwd(), name)
+);
 
 System.config({ baseURL: url.resolve(resolved, '.') });
 
-System.import(
-	resolved
+(
+	code ? System.eval(code) : System.import(resolved)
 ).catch(function(err) {
 	console.error(err);
 	process.exit(1);

@@ -110,6 +110,17 @@ export class Record {
 		this.argValues = argNames.map((name: string) => argTbl[name]);
 	}
 
+	/** Instantiate after translating all detected dependencies.
+	  * TODO: Make sure this does not get executed multiple times for the same record! */
+
+	init(loader: Loader, instantiate?: boolean) {
+		return Promise.all(this.deepDepList.map(
+			(record: Record) => loader.translate(record).then(() => loader.update(record))
+		)).then(
+			() => instantiate ? loader.instantiate(this) : this
+		)
+	}
+
 	wrap(debug?: boolean, inline?: boolean) {
 		let code = this.sourceCode;
 		if(!code) return code;
