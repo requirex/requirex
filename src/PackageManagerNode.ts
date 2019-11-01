@@ -30,18 +30,26 @@ function parserSemverPart(part: string) {
 }
 
 function semverMax(first: string | undefined, rest: string[], num = 0): string {
-	if(!first) return semverMax(rest[0], rest, 1);
+	const latest = 'latest';
 
-	let result = first.split('.');
+	while((!first || first == latest) && num < rest.length) {
+		first = rest[num++];
+	}
+
+	let result = first || '';
+	let resultParts = result.split('.');
 
 	while(num < rest.length) {
-		const other = rest[num++].split('.');
-		const partCount = Math.min(result.length, other.length);
+		const other = rest[num++];
+		if(other == latest) continue;
+
+		const otherParts = other.split('.');
+		const partCount = Math.min(resultParts.length, otherParts.length);
 		let partNum = 0;
 
 		while(partNum < partCount) {
-			const part = parserSemverPart(result[partNum]);
-			const otherPart = parserSemverPart(other[partNum++]);
+			const part = parserSemverPart(resultParts[partNum]);
+			const otherPart = parserSemverPart(otherParts[partNum++]);
 
 			if(otherPart > part) result = other;
 			if(otherPart < part) break;
@@ -50,7 +58,7 @@ function semverMax(first: string | undefined, rest: string[], num = 0): string {
 		if(partNum >= partCount && other.length > partCount) result = other;
 	}
 
-	return(result.join('.'));
+	return(result || latest);
 }
 
 export function getRootConfigPaths(baseKey: string) {
@@ -156,7 +164,7 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	for(let depTbl of [json.dependencies, json.peerDependencies]) {
 		for(let dep of Object.keys(depTbl || {})) {
 			const depMeta = manager.registerMeta(dep);
-			const versionList = depTbl[dep].split(/ *\|\| *| +(- +)?/);
+			const versionList = depTbl[dep].split(/ *\|\| *| +(?:- +)?/);
 
 			depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
 		}
