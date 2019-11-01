@@ -48,12 +48,17 @@ function parseFetchedPackage(
 	let redirKey: string;
 
 	const parsed = fetched.then((res: FetchResponse) => {
-		redirKey = decodeURI(getDir(res.url));
+		redirKey = res.url;
 		return res.text();
 	}).then((data: string) => {
-		const pkg = parsePackage(manager, redirKey, data, name)
-		manager.registerPackage(pkg, rootKey);
-		return pkg;
+		try {
+			const pkg = parsePackage(manager, decodeURI(getDir(redirKey)), data, name)
+			manager.registerPackage(pkg, rootKey);
+			return pkg;
+		} catch(err) {
+			console.error('Error parsing ' + redirKey);
+			throw err;
+		}
 	}).catch(() => {
 		manager.packageConfTbl[rootKey] = false;
 		return Promise.reject(false);

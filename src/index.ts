@@ -86,5 +86,7 @@ requirex.System = System;
 if(!globalSystem) globalEnv.System = System;
 
 if(getTags) {
-	System.import('document!');
+	System.import('document!').catch((err) => {
+		console.error('Error loading document' + (err && err.message ? '\n' + err.message : ''));
+	});
 }

@@ -268,7 +268,7 @@ export class Loader implements LoaderPlugin {
 				options
 			) as Promise<FetchResponse>
 		).then((
-			(res) => res.ok ? res : Promise.reject(res)
+			(res) => res.ok ? res : Promise.reject(new Error('HTTP error ' + res.status + ' fetching ' + url))
 		) as (res: FetchResponse) => FetchResponse);
 	}
 
