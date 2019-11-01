@@ -134,7 +134,6 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 
 	const pkg = new Package(name, rootKey);
 	pkg.version = version;
-	pkg.main = 'index.js';
 
 	for(let field of manager.config.mainFields || ['main']) {
 		const spec = json[field];
@@ -154,12 +153,14 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 					pkg.map[src] = dst;
 					pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
 				}
-			} else {
+			} else if(!pkg.main) {
 				pkg.main = spec;
 				break;
 			}
 		}
 	}
+
+	pkg.main = pkg.main || 'index.js';
 
 	for(let depTbl of [json.dependencies, json.peerDependencies]) {
 		for(let dep of Object.keys(depTbl || {})) {
