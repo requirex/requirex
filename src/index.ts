@@ -87,6 +87,7 @@ if(!globalSystem) globalEnv.System = System;
 
 if(getTags) {
 	System.import('document!').catch((err) => {
-		console.error('Error loading document' + (err && err.message ? '\n' + err.message : ''));
+		console.error('Error loading document:');
+		if(err && err.message) console.error(err);
 	});
 }

@@ -57,6 +57,7 @@ function parseFetchedPackage(
 			return pkg;
 		} catch(err) {
 			console.error('Error parsing ' + redirKey);
+			console.error(err);
 			throw err;
 		}
 	}).catch(() => {
