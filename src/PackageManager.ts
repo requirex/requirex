@@ -1,5 +1,6 @@
 import { Package } from './Package';
 import { LoaderConfig } from './Loader';
+import { rootPathLookup } from './platform';
 
 export interface PackageMeta {
 	lockedVersion?: string;
@@ -40,13 +41,13 @@ export class PackageManager {
 	}
 
 	getPackage(key: string) {
-		let end = key.length;
+		const subKey = rootPathLookup(
+			key,
+			this.packageRootTbl,
+			(pkg) => pkg && pkg instanceof Package
+		);
 
-		do {
-			const pkg = this.packageRootTbl[key.substr(0, end)];
-
-			if(pkg && pkg instanceof Package) return pkg;
-		} while(end && (end = key.lastIndexOf('/', end - 1)) >= 0);
+		if(subKey) return this.packageRootTbl[subKey] as Package;
 	}
 
 	/** Map package name to configuration metadata. */

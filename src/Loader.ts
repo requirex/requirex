@@ -35,6 +35,8 @@ export interface LoaderConfig {
 	/** Suggested dependency versions, format is like in package.json. */
 	dependencies?: { [name: string]: string };
 
+	map?: { [name: string]: string };
+
 	mainFields?: string[];
 
 	/** Transpile imported CSS using PostCSS? */
@@ -184,6 +186,12 @@ export class Loader implements LoaderPlugin {
 		for(let name of keys(dependencies)) {
 			const meta = this.manager.registerMeta(name);
 			if(!meta.suggestedVersion) meta.suggestedVersion = dependencies[name];
+		}
+
+		const map = config.map || {};
+
+		for(let name of keys(map)) {
+			assign(this.package.map, map, 0);
 		}
 
 		assign(this.globalTbl, config.globals || {});

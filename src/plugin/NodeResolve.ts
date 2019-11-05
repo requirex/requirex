@@ -3,7 +3,7 @@ import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { PackageManager, RepoKind } from '../PackageManager';
 import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
-import { emptyPromise, makeTable, keys } from '../platform';
+import { emptyPromise, makeTable, rootPathLookup, keys } from '../platform';
 import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
 
@@ -304,27 +304,36 @@ export class NodeResolve implements LoaderPlugin {
 	resolveSync(key: string, baseKey: string, ref?: DepRef) {
 		const loader = this.loader;
 		const manager = loader.manager;
+		const map = loader.package.map;
 		let pkg = manager.getPackage(baseKey) || loader.package;
 		let resolvedKey = key;
-		let mappedKey: string;
+		let subKey: string | undefined;
+		let mappedKey: string | undefined;
+		let lookupKey: string | undefined;
 		let count = 8;
 		let name: string;
 		let path: string;
 
 		do {
 			while(1) {
-				mappedKey = pkg.map[key];
+				lookupKey = key;
+				subKey = rootPathLookup(lookupKey, pkg.map) || rootPathLookup(lookupKey, map);
 
-				if(!mappedKey) {
+				if(!subKey) {
 					resolvedKey = URL.resolve(baseKey, key);
+					lookupKey = resolvedKey;
 					// TODO: Handle default extensions and possible wildcards.
-					mappedKey = pkg.map[resolvedKey];
+					subKey = rootPathLookup(lookupKey, pkg.map) || rootPathLookup(lookupKey, map);
 				}
 
-				if(mappedKey && mappedKey != key && --count) {
-					key = mappedKey;
-					baseKey = pkg.root + '/';
-				} else break;
+				if(!subKey) break;
+
+				mappedKey = (pkg.map[subKey] || map[subKey]) + lookupKey.substr(subKey.length);
+
+				if(mappedKey == key || !--count) break;
+
+				key = mappedKey;
+				baseKey = pkg.root + '/';
 			}
 
 			if(inRegistry(loader, key)) {

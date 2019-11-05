@@ -152,6 +152,21 @@ export function makeTable(items: string, sep = ' ') {
 	return result;
 }
 
+export function rootPathLookup<Type>(
+	key: string,
+	rootTbl: {[key: string]: Type},
+	filter?: (result: Type) => boolean
+) {
+	let end = key.length;
+
+	do {
+		const subKey = key.substr(0, end);
+		const item = rootTbl[subKey];
+
+		if(filter ? filter(item) : item) return subKey;
+	} while(end && (end = key.lastIndexOf('/', end - 1)) >= 0);
+}
+
 const nodeRegistry: { [name: string]: any } = {};
 const req = typeof require == 'function' && require;
 
