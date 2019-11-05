@@ -625,13 +625,6 @@ export class Parser implements TranslateConfig {
 			}
 		}
 
-		if((token == 'import' || token == 'export') && !depth) {
-			// ES modules contain import and export statements
-			// at the root level scope.
-			record.format = this.hasElements ? 'tsx' : 'ts';
-			return true;
-		}
-
 		return false;
 	}
 
@@ -771,9 +764,16 @@ export class Parser implements TranslateConfig {
 		}
 
 		if(
-			!features.isES6 &&
-			(token == '`' || token == 'let' || token == 'const' || token == '=>') &&
-			(!record.format || record.format == 'js')
+			(
+				// ES modules contain import and export statements
+				// at the root level scope.
+				(token == 'import' || token == 'export') && !depth
+			) || (
+				!features.isES6 &&
+				// TODO: Also detect object key value shorthand notation.
+				(token == '`' || token == 'let' || token == 'const' || token == '=>') &&
+				(!record.format || record.format == 'js')
+			)
 		) {
 			record.format = this.hasElements ? 'tsx' : 'ts';
 			this.formatKnown = true;
