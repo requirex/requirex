@@ -121,11 +121,11 @@ export class TS implements LoaderPlugin {
 
 			record.depList = [];
 
-			for(let ref of info.referencedFiles.concat(info.importedFiles)) {
+			for(let ref of (info.referencedFiles || []).concat(info.importedFiles || [])) {
 				record.addDep(ref.fileName);
 			}
 
-			for(let ref of info.libReferenceDirectives) {
+			for(let ref of info.libReferenceDirectives || []) {
 				record.addDep('typescript/lib/lib.' + ref.fileName + '.d.ts');
 			}
 
