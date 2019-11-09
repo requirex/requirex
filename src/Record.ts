@@ -33,6 +33,10 @@ export interface DepRef {
 	record?: Record;
 	package?: Package;
 	format?: string;
+	/** Custom loader plugin. */
+	plugin?: any;
+	/** Argument to a custom loader plugin. */
+	pluginArg?: string;
 	sourceKey?: string;
 	sourceCode?: string;
 	sourceOriginal?: string;

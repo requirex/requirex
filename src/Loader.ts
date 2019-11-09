@@ -228,14 +228,21 @@ export class Loader implements LoaderPlugin {
 		let plugin: LoaderPlugin | undefined;
 
 		ref = ref || {};
-		const match = key.match(/(^|[/.])([^/.]+)!(.*)$/);
+		const match = key.match(/([^/.]+)!(.*)$/);
 
 		if(match) {
-			ref.format = match[3] || match[2];
+			const format = match[2] || match[1];
+
+			if(format) plugin = this.plugins[format];
+			if(plugin) {
+				ref.format = format;
+			} else {
+				ref.pluginArg = match[2];
+			}
+
 			key = key.substr(0, key.indexOf('!'));
 		}
 
-		if(ref.format) plugin = this.plugins[ref.format];
 		if(!plugin || !plugin.resolveSync) plugin = this.plugins.resolve;
 
 		callerKey = callerKey || this.baseURL || '';
@@ -327,7 +334,7 @@ export class Loader implements LoaderPlugin {
 		).then((resolvedDepKey: string) => {
 			// Avoid blocking on previously seen dependencies,
 			// to break circular dependency chains.
-			const result = (
+			const importRecord = (
 				(ref.record = base.deepDepTbl[resolvedDepKey]) ||
 				this.discoverRecursive(resolvedDepKey, importKey, ref, instantiate, base)
 			);
@@ -336,7 +343,7 @@ export class Loader implements LoaderPlugin {
 			// to be registered (synchronously) when required.
 			record.resolveDep(importKey, ref);
 
-			return result;
+			return importRecord;
 		}).catch((err: NodeJS.ErrnoException) => {
 			if(err && err.message) {
 				err.message += '\n    importing ' + importKey + ' from ' + record.resolvedKey;

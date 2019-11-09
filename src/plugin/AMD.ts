@@ -164,7 +164,10 @@ export class AMD implements LoaderPlugin {
 		globalEnv.define = this.amdDefine;
 		this.loader.latestRecord = record;
 		record.setArgs(record.globalTbl, {
-			'define': this.amdDefine
+			define: this.amdDefine,
+			require: this.amdRequire,
+			global: globalEnv,
+			GLOBAL: globalEnv
 		});
 
 		try {
@@ -192,6 +195,35 @@ export class AMD implements LoaderPlugin {
 		globalEnv.define = define;
 	}
 
+	translate(record: Record) {
+		// Simulate Dojo loader, call plugin load hooks for all dependencies.
+		return Promise.all(record.depNumList.map((num) => {
+			if(num < 3) return false;
+
+			const dep = record.depList[num];
+			const ref = record.depTbl[dep];
+
+			if(ref && ref.plugin && ref.plugin.load && !ref.plugin.normalize) {
+				return new Promise((resolve) =>
+					ref.plugin.load(
+						ref.pluginArg,
+						(key: string) => this.loader.resolveSync(key, record.resolvedKey),
+						resolve
+					)
+				).then((exports) => {
+					ref.module = {
+						id: ref.record!.resolvedKey + '!' + ref.pluginArg,
+						exports
+					};
+
+					return false;
+				});
+			}
+
+			return false;
+		})).then(() => {});
+	}
+
 	instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleAMD;
 
@@ -202,6 +234,9 @@ export class AMD implements LoaderPlugin {
 			reject?: (err: any) => any,
 			referer?: string
 		) => this.amdRequire(names, resolve, reject, referer || record);
+
+		// Simulate Dojo loader method.
+		require.toUrl = (key: string) => this.loader.resolveSync(key, record.resolvedKey);
 
 		// Order must match internalDeps in amdDefine.
 		const deps: any[] = [

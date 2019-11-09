@@ -464,7 +464,25 @@ export class NodeResolve implements LoaderPlugin {
 				resolvedKey = loader.resolveSync(key, baseKey, ref);
 				return checkFile(loader, resolvedKey, baseKey, ref);
 			});
-		});
+		}).then((resolvedKey: string) => !ref.pluginArg ? resolvedKey :
+			// Simulate Dojo loader, call plugin normalize hook.
+			this.loader.import(resolvedKey).then((plugin) => {
+				ref.plugin = plugin;
+
+				if(!plugin.normalize) return resolvedKey;
+
+				return plugin.normalize(
+					ref.pluginArg,
+					(key: string) => this.loader.resolveSync(key, baseKey)
+				);
+			}).catch((err) => {
+				console.error('Error in custom loader plugin ' + key);
+				console.error(err);
+				return resolvedKey;
+			}).then((pluginKey: string) => pluginKey == resolvedKey ? resolvedKey :
+				checkFile(loader, pluginKey, baseKey, ref)
+			)
+		);
 
 		return result;
 	}
