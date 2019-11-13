@@ -3,7 +3,7 @@ import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { PackageManager, RepoKind } from '../PackageManager';
 import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
-import { emptyPromise, makeTable, rootPathLookup, keys } from '../platform';
+import { emptyPromise, makeTable, nodeRequire, rootPathLookup, keys } from '../platform';
 import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
 
@@ -22,10 +22,18 @@ interface PackageLock {
 	};
 }
 
-const isInternal = makeTable(
-	'assert buffer crypto events fs http https ' +
-	'module net os path stream url util vm zlib'
-);
+let internalNames: string;
+
+try {
+	internalNames = nodeRequire('module').builtinModules.join(' ');
+} catch(err) {
+	internalNames = (
+		'assert buffer crypto events fs http https inspector ' +
+		'module net os path stream sys tty url util vm zlib'
+	);
+}
+
+const isInternal = makeTable(internalNames);
 
 function ifExists(loader: Loader, key: string) {
 	// TODO: Fail for wrong MIME type (mainly html error messages).
