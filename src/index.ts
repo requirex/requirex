@@ -77,7 +77,7 @@ export const System = new Loader({
 	},
 	dependencies: {
 		'typescript': '^3',
-		'requirex-postcss-bundle': '~0.1.0'
+		'requirex-postcss-bundle': '~0.2.0'
 	}
 });
 
