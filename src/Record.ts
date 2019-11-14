@@ -119,7 +119,9 @@ export class Record {
 
 	init(loader: Loader, instantiate?: boolean) {
 		return Promise.all(this.deepDepList.map(
-			(record: Record) => loader.translate(record).then(() => loader.update(record))
+			(record: Record) => loader.translate(record).then(
+				() => record.isDirty && loader.update(record) && void 0
+			)
 		)).then(
 			() => instantiate ? loader.instantiate(this) : this
 		)
@@ -220,6 +222,9 @@ export class Record {
 	sourceKey?: string;
 	sourceMap?: SourceMap;
 	sourceOriginal?: string;
+
+	/** True if source code has changed and cache should be updated. */
+	isDirty?: boolean;
 
 	/** Changes already applied to the source code. */
 	changeSet?: ChangeSet;

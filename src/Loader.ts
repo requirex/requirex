@@ -446,9 +446,15 @@ export class Loader implements LoaderPlugin {
 		const plugin = this.plugins[format!];
 
 		if(plugin && plugin.translate) {
+			const source = record.sourceCode;
+
 			return Promise.resolve(
 				plugin.translate(record)
 			).then(() => {
+				if(record.sourceCode != source) {
+					record.isDirty = true;
+				}
+
 				if(record.format != format) {
 					return Promise.resolve(
 						this.discover(record)
