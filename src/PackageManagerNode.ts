@@ -1,7 +1,7 @@
 import { URL, skipSlashes } from './URL';
 import { Package } from './Package';
 import { PackageManager, RepoKind } from './PackageManager';
-import { features, keys } from './platform';
+import { keys } from './platform';
 
 export const nodeModules = '/node_modules/';
 
@@ -138,25 +138,23 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	for(let field of manager.config.mainFields || ['main']) {
 		const spec = json[field];
 
-		if(spec) {
-			if(field == 'browser' && typeof spec == 'object') {
-				// Use browser equivalents of packages and files.
+		if(field == 'browser' && typeof spec == 'object') {
+			// Use browser equivalents of packages and files.
 
-				for(let key of keys(spec)) {
-					const src = URL.resolve(rootKey + '/', key);
-					const dst = spec[key] || '@empty';
+			for(let key of keys(spec)) {
+				const src = URL.resolve(rootKey + '/', key);
+				const dst = spec[key] || '@empty';
 
-					if(rePackage.test(key)) {
-						pkg.map[key] = dst;
-					}
-
-					pkg.map[src] = dst;
-					pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
+				if(rePackage.test(key)) {
+					pkg.map[key] = dst;
 				}
-			} else if(!pkg.main) {
-				pkg.main = spec;
-				break;
+
+				pkg.map[src] = dst;
+				pkg.map[src.replace(/\.([jt]sx?)$/, '')] = dst;
 			}
+		} else if(spec && !pkg.main) {
+			pkg.main = spec;
+			break;
 		}
 	}
 

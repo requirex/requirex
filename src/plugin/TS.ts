@@ -69,6 +69,9 @@ class Host implements Lib.LanguageServiceHost {
 
 }
 
+/** Ensure TypeScript compiler sees a .jsx or .tsx extension in files
+  * containing JSX, even if actual extension is different. */
+
 function transformKey(record: Record) {
 	const format = record.format!;
 	let key = record.resolvedKey;

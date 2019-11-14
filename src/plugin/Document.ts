@@ -241,8 +241,6 @@ export class Document implements LoaderPlugin {
 					const inline: DepRef = {
 						format: 'js',
 						sourceKey: URL.resolve(key, 'Script%20' + inlineCount),
-						// Remove leading whitespace to ensure a possible
-						// strict pragma remains on the first line.
 						sourceCode: code,
 						// Inject transpiled inline scripts in order without
 						// a wrapper function to ensure they get evaluated

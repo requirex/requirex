@@ -551,6 +551,9 @@ export class Loader implements LoaderPlugin {
 		});
 	}
 
+	/** Bundle a script and all of its dependencies
+	  * for production or demoing purposes. */
+
 	build(importKey: string, parent?: string) {
 		return this.analyze(importKey, parent).then((pkgTbl) => {
 			const pkgList = keys(pkgTbl).sort();
@@ -605,6 +608,9 @@ export class Loader implements LoaderPlugin {
 			}).join('\n}, {\n\t') + '\n}]);';
 		});
 	}
+
+	/** Load a bundled script (together with dependencies),
+	  * which should include a call to this method. */
 
 	built(version: number, specList: BuiltSpec[]) {
 		if(version != 1) throw(new Error('Unsupported bundle format'));
