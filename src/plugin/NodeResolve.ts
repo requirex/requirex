@@ -2,7 +2,7 @@ import { URL, getDir } from '../URL';
 import { DepRef } from '../Record';
 import { Package } from '../Package';
 import { PackageManager, RepoKind } from '../PackageManager';
-import { rePackage, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
+import { rePackage, removeSlash, getRootConfigPaths, getRepoPaths, parsePackage, nodeModules } from '../PackageManagerNode';
 import { emptyPromise, makeTable, nodeRequire, rootPathLookup, keys } from '../platform';
 import { FetchResponse } from '../fetch';
 import { Loader, LoaderPlugin } from '../Loader';
@@ -86,10 +86,10 @@ function fetchPackage(
 	const manager = loader.manager;
 	const repo = repoList[repoNum];
 	const repoKey = repo.root || '';
-	const meta = manager.registerMeta(name);
 	let version = '';
 
 	if(repo.isCDN) {
+		const meta = loader.manager.registerMeta(name);
 		version = meta.suggestedVersion || 'latest';
 		meta.suggestedVersion = version;
 		version = '@' + (meta.lockedVersion || version);
@@ -465,7 +465,7 @@ export class NodeResolve implements LoaderPlugin {
 			return fetchPackage(
 				loader,
 				[{}],
-				resolvedKey.replace(/\/$/, '')
+				removeSlash(resolvedKey)
 			).then((pkg: Package | false | undefined) => {
 				if(!pkg) return Promise.reject(new Error('Error fetching ' + resolvedKey));
 

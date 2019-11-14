@@ -7,6 +7,7 @@ export const nodeModules = '/node_modules/';
 
 /** Valid npm package name. */
 const reName = '[0-9a-z][-_.0-9a-z]*';
+const reTag = /^([A-UW-Za-uw-z]|[Vv][-_A-Za-z])[-._0-9A-Za-z]*$/;
 
 export const reVersion = /^(@[.0-9]+)?\/$/;
 
@@ -22,8 +23,12 @@ export const rePackage = new RegExp(
 	'(\/.*)?$'
 );
 
+export function removeSlash(key: string) {
+	return key.replace(/\/$/, '');
+}
+
 function parserSemverPart(part: string) {
-	part = part.replace(/^[ <=>~^]+ */, '');
+	part = part.replace(/^[ <=>~^]+ *v?/, '');
 
 	if(!part || part == 'x') return Infinity;
 	return +part;
@@ -31,8 +36,10 @@ function parserSemverPart(part: string) {
 
 function semverMax(first: string | undefined, rest: string[], num = 0): string {
 	const latest = 'latest';
+	let tag: string | undefined;
 
-	while((!first || first == latest) && num < rest.length) {
+	while((!first || first.match(reTag)) && num < rest.length) {
+		if(!tag && first != latest) tag = first;
 		first = rest[num++];
 	}
 
@@ -41,7 +48,10 @@ function semverMax(first: string | undefined, rest: string[], num = 0): string {
 
 	while(num < rest.length) {
 		const other = rest[num++];
-		if(other == latest) continue;
+		if(other.match(reTag)) {
+			if(!tag && other != latest) tag = other;
+			continue;
+		}
 
 		const otherParts = other.split('.');
 		const partCount = Math.min(resultParts.length, otherParts.length);
@@ -58,7 +68,7 @@ function semverMax(first: string | undefined, rest: string[], num = 0): string {
 		if(partNum >= partCount && other.length > partCount) result = other;
 	}
 
-	return(result || latest);
+	return(result || tag || latest);
 }
 
 export function getRootConfigPaths(baseKey: string) {
@@ -163,9 +173,16 @@ export function parsePackage(manager: PackageManager, rootKey: string, data: str
 	for(let depTbl of [json.dependencies, json.peerDependencies]) {
 		for(let dep of Object.keys(depTbl || {})) {
 			const depMeta = manager.registerMeta(dep);
-			const versionList = depTbl[dep].split(/ *\|\| *| +(?:- +)?/);
+			let version = depTbl[dep];
 
-			depMeta.suggestedVersion = semverMax(depMeta.suggestedVersion, versionList);
+			if(version.match(/^([<=>~^]*v?[.0-9x]+( *\|\| *| +(- +)?|$))+$/) || version.match(reTag)) {
+				depMeta.suggestedVersion = semverMax(
+					depMeta.suggestedVersion,
+					version.split(/ *\|\| *| +(?:- +)?/)
+				);
+			} else if(version.match(/^file:/)) {
+				pkg.map[dep] = removeSlash(version.substr(5));
+			}
 		}
 	}
 
