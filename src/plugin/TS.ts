@@ -2,7 +2,6 @@ import * as Lib from 'typescript';
 
 import { Record } from '../Record';
 import { makeTable, keys } from '../platform';
-import { SourceMap, SourceMapSpec } from '../SourceMap';
 import { Loader, LoaderPlugin } from '../Loader';
 
 declare module '../Record' {
@@ -26,6 +25,7 @@ class Host implements Lib.LanguageServiceHost {
 		return {
 			allowJs: true,
 			esModuleInterop: true,
+			inlineSourceMap: true,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			/** Allow transpiling JS -> JS (identical input and output paths). */
@@ -52,7 +52,7 @@ class Host implements Lib.LanguageServiceHost {
 
 		if(record) {
 			return record.tsSnapshot || (
-				record.tsSnapshot = this.ts.ScriptSnapshot.fromString(record.sourceCode)
+				record.tsSnapshot = this.ts.ScriptSnapshot.fromString(record.sourceCode || '')
 			);
 		}
 	}
@@ -120,7 +120,7 @@ export class TS implements LoaderPlugin {
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
 			}
 
-			const info = ts.preProcessFile(record.sourceCode, true, true);
+			const info = ts.preProcessFile(record.sourceCode || '', true, true);
 
 			record.depList = [];
 
@@ -141,27 +141,13 @@ export class TS implements LoaderPlugin {
 
 		const key = transformKey(record);
 		const jsKey = key.replace(/\.[jt]sx?$/, '.js');
-		const mapKey = jsKey + '.map';
-
-		const keyTbl: { [key: string]: SourceMapSpec } = {};
-
-		keyTbl[key] = {
-			key: record.sourceKey || record.resolvedKey,
-			code: record.sourceOriginal
-		};
 
 		this.tsHost.records = transformKeys(this.loader);
 
 		for(let info of this.tsService.getEmitOutput(key).outputFiles) {
 			if(info.name == jsKey) {
 				record.format = 'js';
-				// Remove existing reference to a source map file.
-				// It will be emitted inline instead.
-				record.sourceCode = SourceMap.removeComment(info.text);
-			}
-			if(info.name == mapKey) {
-				// Store source map, to be transformed and emitted later.
-				record.sourceMap = new SourceMap(key, info.text, keyTbl);
+				record.sourceCode = info.text;
 			}
 		}
 

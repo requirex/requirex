@@ -379,7 +379,6 @@ export class Loader implements LoaderPlugin {
 			record = new Record(this, resolvedKey, importKey, ref.package);
 			record.sourceKey = ref.sourceKey;
 			record.sourceOriginal = ref.sourceOriginal;
-			record.changeSet = ref.changeSet;
 			record.eval = ref.eval;
 			this.records[resolvedKey] = record;
 		}
@@ -490,11 +489,6 @@ export class Loader implements LoaderPlugin {
 
 		if(record.loadError) {
 			throw record.loadError;
-		}
-
-		if(record.sourceMap && record.changeSet) {
-			/** Transform source map to include patches made before transpiling. */
-			record.sourceMap.unpatchInput(record.changeSet);
 		}
 
 		try {

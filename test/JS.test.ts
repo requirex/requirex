@@ -40,5 +40,5 @@ test('Module format autodetection', async (t: test.Test) => {
 	record.globalTbl = { process: { env: { NODE_ENV: 'production' } } };
 
 	js.discover(record);
-	t.equal(record.sourceCode, 'if(0) {}');
+	t.equal(record.sourceCode.replace(/ *\/\*[^*]*\*\/ */g, ''), 'if(0) {}');
 });

@@ -249,7 +249,10 @@ export class Document implements LoaderPlugin {
 							const oldVars = assignReversible(globalEnv, record.argTbl);
 
 							const script = document.createElement('script');
-							const content = document.createTextNode(record.withSource());
+							const content = document.createTextNode(
+								(record.sourceCode || '') +
+								record.getPragma()
+							);
 
 							script.appendChild(content);
 							// Replacing the script element should immediately
@@ -276,16 +279,6 @@ export class Document implements LoaderPlugin {
 
 				trackPos(code.substr(0, offset), row, col);
 				[row, col] = trackResult;
-
-				inline.changeSet = new ChangeSet();
-				inline.changeSet.add({
-					startOffset: 0,
-					startRow: 0,
-					startCol: 0,
-					endOffset: 0,
-					endRow: row,
-					endCol: col
-				}, '');
 
 				inline.sourceCode = code.substr(offset);
 				inlineList.push(inline);

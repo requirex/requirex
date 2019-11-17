@@ -1,5 +1,5 @@
 import { Record, ModuleFormat } from './Record';
-import { ChangeSet, Patch } from './ChangeSet';
+import { ChangeSet } from './ChangeSet';
 import { features, makeTable } from './platform';
 
 /** Lookahead / behind buffer size to speed up matching surrounding tokens. */
@@ -109,7 +109,7 @@ const enum FrameMode {
 /** Represents one nesting level (code block, paren or JSX element)
   * in the parser state stack. */
 
-class StackFrame implements Patch {
+class StackFrame {
 
 	constructor() {
 		this.clear();
@@ -698,7 +698,7 @@ export class Parser implements TranslateConfig {
 					// must be.
 
 					parent.mode = FrameMode.DEAD_BLOCK;
-					this.changeSet.add(state, '0', 1, -1);
+					this.changeSet.add(state.startOffset + 1, state.endOffset - 1, '0');
 
 					stack.track(depth - 1);
 				} else {
@@ -722,7 +722,7 @@ export class Parser implements TranslateConfig {
 						)(record.globalTbl.process));
 
 						parent.mode = alive ? FrameMode.ALIVE_BLOCK : FrameMode.DEAD_BLOCK;
-						this.changeSet.add(state, '' + alive, 1, -1);
+						this.changeSet.add(state.startOffset + 1, state.endOffset - 1, '' + alive);
 
 						// If no errors were thrown, find the following
 						// curly brace delimited block.
@@ -746,7 +746,7 @@ export class Parser implements TranslateConfig {
 				parent.mode = FrameMode.DEAD_BLOCK;
 			} else {
 				// Remove dead code.
-				this.changeSet.add(state, '', 1, -1);
+				this.changeSet.add(state.startOffset + 1, state.endOffset - 1, '');
 				// Prepare for an "else" statement.
 				if(!parent.wasAlive) parent.mode = FrameMode.ALIVE_BLOCK;
 			}

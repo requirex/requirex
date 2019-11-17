@@ -330,13 +330,13 @@ export class FetchCache {
 	}
 
 	fetchRecord(record: Record) {
-		let fetched: Promise<string>;
+		let fetched: Promise<string | undefined>;
 		const storage = this.storage;
 
 		if(record.sourceCode) {
 			if(storage && !this.dataTbl[record.resolvedKey]) {
 				fetched = this.store(record.resolvedKey).then(() => {
-					storage.write(StoreKind.SOURCE, record.resolvedKey, record.sourceCode)
+					storage.write(StoreKind.SOURCE, record.resolvedKey, record.sourceCode || '')
 					return record.sourceCode;
 				});
 			} else {
@@ -349,7 +349,7 @@ export class FetchCache {
 			});
 		}
 
-		return fetched.then((text: string) => {
+		return fetched.then((text: string | undefined) => {
 			const meta: CacheMeta | undefined = this.metaTbl[record.resolvedKey];
 
 			record.sourceCode = text;

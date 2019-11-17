@@ -6,11 +6,11 @@ import { Loader, LoaderPlugin } from '../Loader';
 export class Json implements LoaderPlugin {
 
 	instantiate(record: Record) {
-		return record.compiled || JSON.parse(record.sourceCode);
+		return record.compiled || (record.sourceCode && JSON.parse(record.sourceCode));
 	}
 
 	wrap(record: Record) {
-		return record.sourceCode;
+		return record.sourceCode || 'null';
 	}
 
 }

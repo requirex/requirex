@@ -2,7 +2,6 @@ import { ModuleType } from './Module';
 import { Package } from './Package';
 import { globalEval, keys, assign } from './platform';
 import { SourceMap } from './SourceMap';
-import { ChangeSet } from './ChangeSet';
 import { Loader } from './Loader';
 
 export type ModuleFormat = (
@@ -40,7 +39,6 @@ export interface DepRef {
 	sourceKey?: string;
 	sourceCode?: string;
 	sourceOriginal?: string;
-	changeSet?: ChangeSet;
 	eval?: (record: Record) => void;
 }
 
@@ -114,61 +112,96 @@ export class Record {
 		this.argValues = argNames.map((name: string) => argTbl[name]);
 	}
 
+	extractSourceMap() {
+		const code = this.sourceCode;
+		if(!code) return;
+
+		let url: string | undefined;
+		const common = '[#@][ \t]*source(Mapping)?URL[ \t]*=[ \t]*([^\r\n';
+
+		this.sourceCode = code.replace(
+			new RegExp((
+				'(?:^|\n)[ \t]*(?:' +
+				'//' + common + ']+)|' +
+				'/*' + common + '*]+)\*/' +
+				')'
+			), 'g'),
+			(match, kind1, url1, kind2, url2) => {
+				if((kind1 || kind2) == 'Mapping') {
+					url = (url1 || url2).replace(/^[ \t'"]+/, '').replace(/[ \t'"]+$/, '');
+				}
+
+				return '';
+			}
+		);
+
+		if(url) this.sourceMap = new SourceMap(url);
+	}
+
 	/** Instantiate after translating all detected dependencies.
 	  * TODO: Make sure this does not get executed multiple times for the same record! */
 
 	init(loader: Loader, instantiate?: boolean) {
 		return Promise.all(this.deepDepList.map(
-			(record: Record) => loader.translate(record).then(
-				() => record.isDirty && loader.update(record) && void 0
-			)
+			(record: Record) => loader.translate(record).then(() => {
+				record.extractSourceMap();
+				if(record.isDirty) loader.update(record);
+			})
 		)).then(
 			() => instantiate ? loader.instantiate(this) : this
 		)
 	}
 
-	withSource() {
-		return this.sourceCode +
-		'\n//# sourceURL=' + this.resolvedKey +
-		(!this.sourceMap ? '' :
+	getPragma() {
+		return '\n//# sourceURL=' + this.resolvedKey + (!this.sourceMap ? '' :
 			'!transpiled' +
 			'\n//# sourceMappingURL=' + this.sourceMap.encodeURL()
-		)
+		) + '\n'
 	}
 
 	withWrapper() {
 		const [prologue, epilogue] = this.getWrapper();
-		return prologue + this.withSource() + epilogue;
+		return prologue + this.sourceCode + epilogue;
 	}
 
 	getWrapper() {
 		return [
-			'(function(' + this.argNames.join(',') + '){',
-			'})'
+			'(function(' + this.argNames.join(', ') + ') {\n',
+			'\n})'
 		];
 	}
 
 	wrap() {
 		const record = this;
 		const [prologue, epilogue] = this.getWrapper();
+
+		if(!this.sourceMap) {
+			return globalEval(
+				prologue +
+				(this.sourceCode || '') +
+				epilogue +
+				this.getPragma()
+			);
+		}
+
 		const compiled = globalEval(
 			// Wrapper function for exposing "global" variables to the module.
-			prologue +
-			// Run unmodified module source code inside the wrapper function,
-			// preserving correctness of any original source map.
-			'return eval(' +
-			// Get source code from last, unnamed argument and hide the argument.
-			'(function(a,c){' +
-			'c=a[a.length-1];a[a.length-1]=void 0;a.length=0;return c' +
-			'})(arguments)' +
-			')' +
-			epilogue
+			prologue + (
+				// Run unmodified module source code inside the wrapper function,
+				// preserving correctness of any original source map.
+				'return eval(' + (
+					// Get source code from last, unnamed argument and hide the argument.
+					'(function(a,c){' +
+					'c=a[a.length-1];a[a.length-1]=void 0;a.length=0;return c' +
+					'})(arguments)'
+				) + ')'
+			) + epilogue
 		);
 
 		return function(this: any) {
 			const args: any[] = [].slice.call(arguments);
 
-			args.push(record.withSource());
+			args.push((record.sourceCode || '') + record.getPragma());
 
 			return compiled.apply(this, args);
 		};
@@ -209,7 +242,7 @@ export class Record {
 	deepDepList: Record[] = [];
 
 	/** Fetched and translated source code. */
-	sourceCode: string;
+	sourceCode?: string;
 	/** Source code wrapped and compiled into an executable function. */
 	compiled: ModuleFactory;
 	factory: ModuleFactory;
@@ -221,9 +254,6 @@ export class Record {
 
 	/** True if source code has changed and cache should be updated. */
 	isDirty?: boolean;
-
-	/** Changes already applied to the source code. */
-	changeSet?: ChangeSet;
 
 	/** Optional custom evaluation function. For example HTML inline scripts
 	  * cannot use default eval() because they need a shared scope. */

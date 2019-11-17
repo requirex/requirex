@@ -80,14 +80,14 @@ export class PostCSS implements LoaderPlugin {
 			return;
 		}
 
-		return this.builder.then((builder: Lib.PostBuilder) => {
-			return builder.build(
+		return this.builder.then((builder: Lib.PostBuilder): Promise<string | undefined> | string | undefined => {
+			return record.sourceCode && builder.build(
 				record.sourceCode,
 				wrap(record.resolvedKey)
 			);
-		}).then((code: string) => {
+		}).then((code: string | undefined) => {
 			record.format = 'cssraw';
-			record.sourceCode = SourceMap.removeComment(code);
+			record.sourceCode = code;
 		}).catch((err: any) => {
 			console.error(err);
 		});
