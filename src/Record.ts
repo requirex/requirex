@@ -1,6 +1,6 @@
 import { ModuleType } from './Module';
 import { Package } from './Package';
-import { keys, assign } from './platform';
+import { globalEval, keys, assign } from './platform';
 import { SourceMap } from './SourceMap';
 import { ChangeSet } from './ChangeSet';
 import { Loader } from './Loader';
@@ -127,55 +127,51 @@ export class Record {
 		)
 	}
 
-	wrap(debug?: boolean, inline?: boolean) {
-		let code = this.sourceCode;
-		if(!code) return code;
+	withSource() {
+		return this.sourceCode +
+		'\n//# sourceURL=' + this.resolvedKey +
+		(!this.sourceMap ? '' :
+			'!transpiled' +
+			'\n//# sourceMappingURL=' + this.sourceMap.encodeURL()
+		)
+	}
 
-		let prologue = '';
-		let epilogue = '';
+	withWrapper() {
+		const [prologue, epilogue] = this.getWrapper();
+		return prologue + this.withSource() + epilogue;
+	}
 
-		if(!inline) {
-			prologue = '(function(' + this.argNames.join(', ') + ') {\n';
-			// Break possible source map comment on the last line.
-			epilogue = '\n})';
-		}
+	getWrapper() {
+		return [
+			'(function(' + this.argNames.join(',') + '){',
+			'})'
+		];
+	}
 
-		if(debug) {
-			const strict = code.match(/^[ \t]*["'`]use strict["'`][ \t\r;]*\n/);
-			let offset = 0;
-			let row = 0;
-			let col = 0;
+	wrap() {
+		const record = this;
+		const [prologue, epilogue] = this.getWrapper();
+		const compiled = globalEval(
+			// Wrapper function for exposing "global" variables to the module.
+			prologue +
+			// Run unmodified module source code inside the wrapper function,
+			// preserving correctness of any original source map.
+			'return eval(' +
+			// Get source code from last, unnamed argument and hide the argument.
+			'(function(a,c){' +
+			'c=a[a.length-1];a[a.length-1]=void 0;a.length=0;return c' +
+			'})(arguments)' +
+			')' +
+			epilogue
+		);
 
-			if(strict) {
-				// Always hoist strictness pragma to the top.
-				offset = strict[0].length;
-				col = offset;
-				++row;
-			}
+		return function(this: any) {
+			const args: any[] = [].slice.call(arguments);
 
-			epilogue += '\n//# sourceURL=' + this.resolvedKey;
+			args.push(record.withSource());
 
-			const changes = new ChangeSet().add({
-				startOffset: offset,
-				startRow: row,
-				startCol: col,
-				endOffset: offset,
-				endRow: row,
-				endCol: col,
-				replacement: prologue
-			});
-
-			if(this.sourceMap) {
-				epilogue += (
-					'!transpiled' +
-					'\n//# sourceMappingURL=' + this.sourceMap.patchOutput(changes).encodeURL()
-				);
-			}
-
-			return changes.patchCode(code) + epilogue;
-		} else {
-			return prologue + code + epilogue;
-		}
+			return compiled.apply(this, args);
+		};
 	}
 
 	/** Autodetected or configured format of the module. */

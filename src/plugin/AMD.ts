@@ -1,6 +1,6 @@
 import { Record, ModuleFactory } from '../Record';
 import { ModuleAMD } from '../Module';
-import { globalEnv, globalEval } from '../platform';
+import { globalEnv } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
 function initRecord(record: Record) {
@@ -171,7 +171,7 @@ export class AMD implements LoaderPlugin {
 		});
 
 		try {
-			const compiled = record.compiled || globalEval(record.wrap(true));
+			const compiled = record.compiled || record.wrap();
 
 			// Call imported module.
 			compiled.apply(globalEnv, record.argValues);
@@ -264,7 +264,7 @@ export class AMD implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return record.wrap();
+		return record.withWrapper();
 	}
 
 }

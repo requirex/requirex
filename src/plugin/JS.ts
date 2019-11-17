@@ -1,6 +1,5 @@
 import { Record } from '../Record';
 import { Loader, LoaderPlugin } from '../Loader';
-import { globalEval } from '../platform';
 import { Parser } from '../Parser';
 
 /** Match a hashbang header line used to make JS files executable in *nix systems. */
@@ -45,7 +44,7 @@ export class JS implements LoaderPlugin {
 		if(!compiled && !record.eval) {
 			try {
 				// Compile module into a function under global scope.
-				compiled = globalEval(record.wrap(true));
+				compiled = record.wrap();
 			} catch(err) {
 				record.loadError = err;
 				throw err;
@@ -63,7 +62,7 @@ export class JS implements LoaderPlugin {
 	wrap(record: Record) {
 		record.setArgs(record.globalTbl);
 
-		return record.wrap();
+		return record.withWrapper();
 	}
 
 }

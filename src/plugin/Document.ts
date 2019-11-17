@@ -249,7 +249,7 @@ export class Document implements LoaderPlugin {
 							const oldVars = assignReversible(globalEnv, record.argTbl);
 
 							const script = document.createElement('script');
-							const content = document.createTextNode(record.wrap(true, true));
+							const content = document.createTextNode(record.withSource());
 
 							script.appendChild(content);
 							// Replacing the script element should immediately

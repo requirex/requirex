@@ -1,7 +1,7 @@
 import { URL, getDir } from '../URL';
 import { Record } from '../Record';
 import { ModuleCJS } from '../Module';
-import { globalEnv, globalEval } from '../platform';
+import { globalEnv } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
 /** CommonJS loader plugin. */
@@ -63,7 +63,7 @@ export class CJS implements LoaderPlugin {
 		if(!compiled && !record.eval) {
 			try {
 				// Compile module into a function under global scope.
-				compiled = globalEval(record.wrap(true));
+				compiled = record.wrap();
 			} catch(err) {
 				record.loadError = err;
 				throw err;
@@ -98,7 +98,7 @@ export class CJS implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return record.wrap();
+		return record.withWrapper();
 	}
 
 }

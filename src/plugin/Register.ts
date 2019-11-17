@@ -1,5 +1,5 @@
 import { Record } from '../Record';
-import { globalEnv, globalEval } from '../platform';
+import { globalEnv } from '../platform';
 import { Loader, LoaderPlugin, SystemDeclaration } from '../Loader';
 
 export class Register implements LoaderPlugin {
@@ -22,7 +22,7 @@ export class Register implements LoaderPlugin {
 		loader.latestRecord = record;
 
 		try {
-			const compiled = record.compiled || globalEval(record.wrap(true));
+			const compiled = record.compiled || record.wrap();
 
 			// Call imported module.
 			compiled.apply(globalEnv, record.argValues);
@@ -57,7 +57,7 @@ export class Register implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return record.wrap();
+		return record.withWrapper();
 	}
 
 }
