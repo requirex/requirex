@@ -37,10 +37,17 @@ const reRegister = /^\s*\.\s*register\s*\(\s*["'`\[]/;
 /** Match a ".built(...)" method call (used after a "System" token). */
 const reBuilt = /^\s*\.\s*built\s*\(\s*1\s*,/;
 
-/** Match a function call with a string argument.
-  * Backslashes and dollar signs are prohibited to avoid arbitrary expressions
-  * in template literals and escaped string delimiters. */
-const reCallString = /^\s*\(\s*(["'`])([^$"'`\\]+)(["'`])\s*\)/;
+/** Match a string or template literal.
+  * NOTE: Unescaped dollar signs are prohibited but line breaks are allowed in
+  * template literals. */
+export const reString = (
+	'"([^\n\\\\"]|\\\\[^\r\n])*"|' +
+	"'([^\n\\\\']|\\\\[^\r\n])*'|" +
+	'`([^\$\\\\`]|\\\\.)*`'
+);
+
+/** Match a function call with a string argument. */
+const reCallString = new RegExp('^\\s*\\(\\s*(' + reString + ')\\s*\\)');
 
 const reSet = /(function|var|let|const)\s*$/;
 
@@ -572,7 +579,7 @@ const formatTbl: {
 	'System': ['system', true, reRegister, reSet],
 	// require suggests CommonJS, but AMD also supports require()
 	// so keep trying to detect module type.
-	'require': ['cjs', false, reCallString, null],
+	'require': ['cjs', false, reCallLiteral, null],
 	// CommonJS modules use exports or module.exports.
 	// AMD may use them, but a surrounding define should come first.
 	'module': ['cjs', true, reModuleExports, null],
@@ -799,9 +806,9 @@ export class Parser implements TranslateConfig {
 			const chunkAfter = text.substr(pos, chunkSize);
 			const match = reCallString.exec(chunkAfter);
 
-			if(match && match[1] == match[3]) {
+			if(match) {
 				// Called with a string surrounded in matching quotations.
-				record.addDep(match[2]);
+				record.addDep(match[1].substr(1, match[1].length - 2));
 			}
 		}
 	}
