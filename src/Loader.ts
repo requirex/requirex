@@ -217,6 +217,36 @@ export class Loader implements LoaderPlugin {
 		)
 	}
 
+	/** Synchronous import, like Node.js require(). */
+
+	require(importKey: string, callerKey?: string, callerRecord?: Record) {
+		if(callerRecord) {
+			const ref = callerRecord.depTbl[importKey];
+			if(ref) {
+				return ref.module ? ref.module.exports : (
+					this.instantiate(ref.record!)
+				);
+			}
+		}
+
+		const resolvedKey = this.resolveSync(importKey, callerKey);
+		const moduleObj = this.registry[resolvedKey];
+
+		if(!moduleObj) {
+			if(typeof require == 'function' && resolvedKey.substr(0, 5) == 'file:') {
+				return require(URL.toLocal(resolvedKey));
+			} else {
+				throw new Error(
+					'Module not already loaded loading "' + importKey +
+					'" as "' + resolvedKey + '"' +
+					(!callerKey ? '.' : ' from "' + callerKey + '".')
+				);
+			}
+		}
+
+		return moduleObj.exports;
+	}
+
 	/** @param key Name of module or file to import, may be a relative path.
 	  * @param parent Resolved URL of a possible parent module. */
 

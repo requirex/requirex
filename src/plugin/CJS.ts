@@ -14,23 +14,15 @@ export class CJS implements LoaderPlugin {
 		const loader = this.loader;
 
 		const cjsRequire: NodeRequire = (
-			(key: string) => {
-				const ref = record.depTbl[key];
-				if(ref) {
-					return ref.module ? ref.module.exports : loader.instantiate(ref.record!);
-				}
-
-				const resolvedKey = loader.resolveSync(key, record.resolvedKey);
-				const moduleObj = loader.registry[resolvedKey];
-
-				return moduleObj.exports;
-			}
+			(key: string) => loader.require(key, record.resolvedKey, record)
 		) as any;
 
 		// TODO: maybe support cjsRequire.resolve.paths()
 		cjsRequire.resolve = (
 			(key: string) => loader.resolveSync(key, record.resolvedKey)
 		) as any;
+
+		cjsRequire.cache = loader.registry;
 
 		// TODO: Object.defineProperty(exports, "__esModule", { value: true });
 		const exports = {};

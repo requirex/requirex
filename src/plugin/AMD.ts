@@ -129,28 +129,7 @@ export class AMD implements LoaderPlugin {
 				reject
 			);
 		} else if(typeof names == 'string') {
-			// Synchronous require().
-			if(record) {
-				const ref = record.depTbl[names];
-				if(ref) {
-					return ref.module ? ref.module.exports : (
-						record.loader.instantiate(ref.record!)
-					);
-				}
-			}
-
-			const resolvedKey = loader.resolveSync(names, referer);
-			const moduleObj = loader.registry[resolvedKey];
-
-			if(!moduleObj) {
-				throw new Error(
-					'Module not already loaded loading "' + names +
-					'" as "' + resolvedKey + '"' +
-					(!referer ? '.' : ' from "' + referer + '".')
-				);
-			}
-
-			return moduleObj.exports;
+			return loader.require(names, referer, record);
 		} else {
 			throw new TypeError('Invalid require');
 		}
