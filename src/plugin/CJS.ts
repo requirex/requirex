@@ -22,7 +22,7 @@ export class CJS implements LoaderPlugin {
 			(key: string) => loader.resolveSync(key, record.resolvedKey)
 		) as any;
 
-		cjsRequire.cache = loader.registry;
+		cjsRequire.cache = loader.registry as any;
 
 		// TODO: Object.defineProperty(exports, "__esModule", { value: true });
 		const exports = {};
