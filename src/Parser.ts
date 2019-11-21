@@ -579,7 +579,7 @@ const formatTbl: {
 	'System': ['system', true, reRegister, reSet],
 	// require suggests CommonJS, but AMD also supports require()
 	// so keep trying to detect module type.
-	'require': ['cjs', false, reCallString, null],
+	'require': ['cjs', false, reCallLiteral, null],
 	// CommonJS modules use exports or module.exports.
 	// AMD may use them, but a surrounding define should come first.
 	'module': ['cjs', true, reModuleExports, null],
