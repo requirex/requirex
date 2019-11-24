@@ -1,6 +1,7 @@
 import * as Lib from 'typescript';
 
 import { Record } from '../Record';
+import { SourceMap, SourceMapSpec } from '../SourceMap';
 import { makeTable, keys } from '../platform';
 import { Loader, LoaderPlugin } from '../Loader';
 
@@ -25,7 +26,7 @@ class Host implements Lib.LanguageServiceHost {
 		return {
 			allowJs: true,
 			esModuleInterop: true,
-			inlineSourceMap: true,
+			inlineSourceMap: false,
 			jsx: ts.JsxEmit.React,
 			noEmitOnError: false,
 			/** Allow transpiling JS -> JS (identical input and output paths). */
@@ -69,21 +70,23 @@ class Host implements Lib.LanguageServiceHost {
 
 }
 
-/** Ensure TypeScript compiler sees a .jsx or .tsx extension in files
-  * containing JSX, even if actual extension is different. */
+/** Replace or add missing extension to ensure the TypeScript compiler
+  * recognizes it. Force a .jsx or .tsx extension in files containing JSX,
+  * even if actual extension is different. */
 
 function transformKey(record: Record) {
 	const format = record.format!;
-	let key = record.resolvedKey;
-	const extension = key.match(/(\.[a-z]+)?$/)![0];
+	const key = record.resolvedKey;
+	const extension = key.match(/(\.([a-z]+))?$/)![2] || '';
 
-	if(!extension) {
-		key += '.' + (transpileFormats[format] ? format : 'js');
-	} else if(extension != format && (format == 'jsx' || format == 'tsx')) {
-		key = key.substr(0, key.length - extension.length + 1) + format;
-	}
-
-	return key;
+	return (
+		!extension ||
+		(extension != format && (format == 'jsx' || format == 'tsx')) ||
+		(!transpileFormats[extension] && extension != 'js')
+	) ? (
+		key.substr(0, key.length - extension.length) +
+		(extension ? '' : '.') + (transpileFormats[format] ? format : 'js')
+	) : key;
 }
 
 function transformKeys(loader: Loader) {
@@ -122,8 +125,6 @@ export class TS implements LoaderPlugin {
 
 			const info = ts.preProcessFile(record.sourceCode || '', true, true);
 
-			record.depList = [];
-
 			for(let ref of (info.referencedFiles || []).concat(info.importedFiles || [])) {
 				record.addDep(ref.fileName);
 			}
@@ -141,6 +142,17 @@ export class TS implements LoaderPlugin {
 
 		const key = transformKey(record);
 		const jsKey = key.replace(/\.[jt]sx?$/, '.js');
+		const mapKey = jsKey + '.map';
+
+		const keyTbl: { [key: string]: SourceMapSpec } = {};
+
+		// If unmodified source (such as full HTML code) is not passed to the
+		// TypeScript compiler, ensure it still ends up in the source map.
+
+		keyTbl[key] = {
+			key: record.sourceKey || record.resolvedKey,
+			code: record.sourceOriginal
+		};
 
 		this.tsHost.records = transformKeys(this.loader);
 
@@ -148,6 +160,9 @@ export class TS implements LoaderPlugin {
 			if(info.name == jsKey) {
 				record.format = 'js';
 				record.sourceCode = info.text;
+				record.extractSourceMap();
+			} else if(info.name == mapKey) {
+				record.sourceMap = new SourceMap(record.resolvedKey, info.text, keyTbl);
 			}
 		}
 

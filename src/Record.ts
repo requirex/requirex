@@ -135,7 +135,11 @@ export class Record {
 			}
 		);
 
-		if(url) this.sourceMap = new SourceMap(url);
+		if(url && !this.sourceMap) {
+			this.sourceMap = new SourceMap(url);
+		}
+
+		return this.sourceMap;
 	}
 
 	/** Instantiate after translating all detected dependencies.
