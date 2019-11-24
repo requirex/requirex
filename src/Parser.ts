@@ -799,10 +799,7 @@ export class Parser implements TranslateConfig {
 			this.formatKnown = this.guessFormat(token, depth, pos, last);
 		}
 
-		if(
-			token == this.requireToken &&
-			(record.format == 'amd' || record.format == 'cjs')
-		) {
+		if(token == this.requireToken) {
 			const chunkAfter = text.substr(pos, chunkSize);
 			const match = reCallString.exec(chunkAfter);
 
