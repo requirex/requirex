@@ -23,7 +23,7 @@ export type ModuleFactory = (...args: any[]) => any;
 
 export interface DepRef {
 	/** True if dependency will be imported after resolving.
-	  * Existance checks can also load the file to save data transfers. */
+	  * Existence checks can also load the file to save data transfers. */
 	isImport?: boolean;
 	/** Name of referenced but not yet fetched package. */
 	pendingPackageName?: string;
