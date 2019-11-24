@@ -15,7 +15,6 @@ export class CSS implements LoaderPlugin {
 		if(record.sourceCode) {
 			// Inject as a style element if transpiled.
 			// Relative URLs must be fixed by the transpiler.
-			console.log(record.sourceCode);
 
 			const style = document.createElement('style');
 			style.innerHTML = record.sourceCode;

@@ -339,15 +339,6 @@ export class Loader implements LoaderPlugin {
 		});
 	}
 
-	record(resolvedKey: string, sourceCode?: string, format?: ModuleFormat) {
-		const record = new Record(this, resolvedKey);
-
-		record.format = format || 'js';
-		if(sourceCode) record.sourceCode = sourceCode;
-
-		this.records[resolvedKey] = record;
-	}
-
 	/** Resolve and translate an imported dependency and its recursive dependencies.
 	  *
 	  * @param importKey Dependency name (module or file), may be a relative path.

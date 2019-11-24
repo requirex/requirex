@@ -10,6 +10,9 @@ interface TreeItem<Type> extends Array<Node | TreeItem<Type>> {
 	data?: Type;
 }
 
+/** Enum members of Node as a const enum to save space. See:
+  * https://developer.mozilla.org/en-US/docs/Web/API/Node/nodeType */
+
 export const enum NodeType {
 	ELEMENT_NODE = 1,
 	TEXT_NODE = 3,
@@ -26,14 +29,15 @@ export const enum NodeType {
 
 class NodeTree<Type> {
 
-	/** @param node Any node from the document this tree should represent. */
+	/** @param node Any node from the document this tree should represent
+	  * (used to find the document root node). */
 
 	constructor(node: Node) {
-		let root: Node;
+		let root = node;
 
-		do {
+		while((node = node.parentNode as Node)) {
 			root = node;
-		} while((node = node.parentNode as Node));
+		}
 
 		this.root = [root];
 	}
@@ -214,7 +218,9 @@ export class Document implements LoaderPlugin {
 
 		if(!chunkCount) return;
 
+		/** Start offset of HTML content between found script elements. */
 		let prevOffset = 0;
+		/** Replacement string for previous HTML content. */
 		let prevCode = '';
 		const changeSet = new ChangeSet();
 
@@ -222,19 +228,21 @@ export class Document implements LoaderPlugin {
 			let result: string;
 
 			if(element.src) {
-				// External script.
+				// External script. Emit open and close tag in source map.
 				result = open + close;
 				changeSet.add(prevOffset, offset, prevCode);
 
+				// When executed, replace with a require() statement.
 				prevOffset = offset;
 				prevCode = 'require("' + element.src + '")';
 			} else {
-				// Inline script.
+				// Inline script. Emit element with contents in source map.
 				const code = element.text;
 				result = open + code + close;
 				offset += open.length;
 				changeSet.add(prevOffset, offset, prevCode);
 
+				// Leave text content as is when executing the code.
 				prevOffset = offset + code.length;
 				prevCode = '';
 			}
@@ -245,16 +253,21 @@ export class Document implements LoaderPlugin {
 		changeSet.add(prevOffset, original.length, prevCode);
 
 		record.eval = (record: Record) => {
+			// Copy the record's global variables to the global environment.
 			const oldVars = assignReversible(globalEnv, record.argTbl);
 
+			// Inline scripts get executed in the global environment.
 			globalEval(
 				(record.sourceCode || '') +
 				record.getPragma()
 			);
 
+			// Restore global environment.
 			assign(globalEnv, oldVars);
 		};
 
+		// Comment out all HTML code. This preserves source map offsets
+		// between original HTML and transpiled JavaScript code.
 		record.sourceCode = changeSet.patchCode(original);
 		record.sourceOriginal = original;
 		record.format = 'js';
