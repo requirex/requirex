@@ -125,6 +125,9 @@ export class TS implements LoaderPlugin {
 
 			const info = ts.preProcessFile(record.sourceCode || '', true, true);
 
+			// Deps will be re-detected in the transpiled output.
+			record.clearDeps();
+
 			for(let ref of (info.referencedFiles || []).concat(info.importedFiles || [])) {
 				record.addDep(ref.fileName);
 			}

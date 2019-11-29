@@ -81,16 +81,22 @@ export class Record {
 		this.depTbl[key] = ref;
 	}
 
+	clearDeps() {
+		for(let key of this.depList) {
+			this.depNumTbl[key] = void 0;
+		}
+
+		this.depList = [];
+	}
+
 	/** Turn all dependencies detected so far into devDependencies. */
 
 	setDepsDev() {
-		let depList = this.depList;
-		this.depList = [];
+		const depList = this.depList;
+		this.clearDeps();
 
 		for(let key of depList) {
 			const dep = this.depTbl[key];
-
-			this.depNumTbl[key] = void 0;
 
 			if(dep && !this.devDepTbl[key]) {
 				this.devDepTbl[key] = dep;
