@@ -220,9 +220,6 @@ export class Record {
 	/** Autodetected or configured format of the module. */
 	format?: ModuleFormat;
 
-	// formatBlacklist: { [format: ModuleFormat]: boolean } = {};
-	formatBlacklist: { [format: string]: boolean } = {};
-
 	parentBundle?: Record;
 	bundleChildren?: Record[];
 

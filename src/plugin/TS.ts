@@ -118,18 +118,23 @@ export class TS implements LoaderPlugin {
 		}
 
 		return this.lib.then((ts: typeof Lib) => {
+			const code = record.sourceCode || '';
+
 			if(!this.tsService) {
 				this.tsHost = new Host(this.loader, ts);
 				this.tsService = ts.createLanguageService(this.tsHost, ts.createDocumentRegistry());
 			}
 
-			const info = ts.preProcessFile(record.sourceCode || '', true, true);
-
-			// Deps will be re-detected in the transpiled output.
-			record.clearDeps();
+			const info = ts.preProcessFile(code, true, true);
 
 			for(let ref of (info.referencedFiles || []).concat(info.importedFiles || [])) {
-				record.addDep(ref.fileName);
+				// Ignore require() calls reported by preProcessFile, because
+				// our parser can also detect if require has been redefined.
+				const len = Math.min(ref.pos, 32);
+
+				if(!/require\s*\(\s*["']?$/.test(code.substr(ref.pos - len, len))) {
+					record.addDep(ref.fileName);
+				}
 			}
 
 			for(let ref of info.libReferenceDirectives || []) {

@@ -6,13 +6,13 @@ import { features, makeTable } from './platform';
 const chunkSize = 128;
 
 /** Table of characters that may surround keyword and identifier names. */
-const sepList = '\t\n\r !"#%&\'()*+,-./;<=>?@[\\]^`{|}~';
+const sepList = '-\t\n\r !"#%&\'()*+,./:;<=>?@[\\\\\\]^`{|}~';
 const sepBefore = makeTable(sepList, '');
 const sepAfter = makeTable(sepList, '');
 
 // Keywords may occur after a label or field name, not before.
 // So a separating : must come before them, not after.
-sepBefore[':'] = true;
+sepAfter[':'] = false;
 
 /** Create a regexp for matching string or comment start tokens,
   * angle brackets opening JSX elements, curly braces
@@ -49,14 +49,28 @@ export const reString = (
 /** Match a function call with a string argument. */
 const reCallString = new RegExp('^\\s*\\(\\s*(' + reString + ')\\s*\\)');
 
-const reSet = /(function|var|let|const)\s*$/;
+/** Match before a variable name means it gets redefined in the surrounding
+  * block and loses any special meaning. */
+const reIsVariable = /(function|var|let|const)\s+([^,;}\r\n]*,\s*)*$/;
+
+/** Match before a variable name means it gets redefined in the following
+  * block and loses any special meaning. */
+const reIsParamBefore = new RegExp(
+	'function(\\s+[$_A-Za-z][^' + sepList + ']*)?\\s*\\(([^,)]*,\\s*)*$'
+);
+
+/** Match after a variable name means it gets redefined in the following
+  * block or expression and loses any special meaning. */
+const reIsParamAfter = new RegExp(
+	'^((,\\s*[$_A-Za-z][^' + sepList + ']*\\s*)*\\))?\\s*=>'
+);
 
 /** Match using module['exports'] or module.exports in a function call,
   * assignment to it, or access of its members using dot or array notation. */
-const reModuleExports = /^\s*(\[\s*["'`]exports["'`]\s*\]|\.\s*exports)\s*(\[["'`]|[.=),])/;
+const reModuleExports = /^\s*(\[\s*["'`]exports["'`]\s*\]|\.\s*exports)\s*(\[\s*["'`]|[.=),])/;
 
 /** Match access to members of exports using dot or array notation. */
-const reExports = /^\s*(\[["'`]|\.)/;
+const reIsMemberAccess = /^\s*(\[\s*["'`]|\.)/;
 
 /** Match any number of comments and whitespace. */
 const reComments = '\\s*(//[^\n]*\n\\s*|/\\*[^*]*(\\*[^*/][^*]*)*\\*/\\s*)*';
@@ -72,7 +86,7 @@ const reBeforeLiteral = new RegExp(
 
 /** Match the start of a JSX element: angle bracket, name, and whitespace or closing bracket.
   * A slash next to one of the brackets is optional. */
-const reElement = /<\/?\s*([^ !"#%&'()*+,./:;<=>?@[\\\]^`{|}~]+)(\s+|\/?>)/;
+const reElement = new RegExp('</?\s*([^' + sepList + ']+)(\s+|/?>)');
 
 /** Match any potential function call or assignment, including suspicious
   * comments before parens. Matching expressions should have no side effects
@@ -126,14 +140,21 @@ class StackFrame {
 	  *
 	  * @param parent Parent stack frame to track if inside known-dead code. */
 
-	clear(parent?: StackFrame) {
+	clear(last?: number, parent?: StackFrame) {
 		this.mode = FrameMode.NONE;
 		this.conditionStart = 0;
 		this.wasAlive = false;
 
 		if(parent) {
 			this.isDead = parent.isDead || parent.mode == FrameMode.DEAD_BLOCK;
+			if(parent.scopeStart > this.scopeStart) {
+				this.scopeNext = parent.scopeNext;
+				this.scopeStart = parent.scopeStart;
+			}
 		}
+
+		this.scope = (last || 0) < this.scopeStart && this.scopeNext;
+		this.scopeNext = void 0;
 
 		return this;
 	}
@@ -167,6 +188,16 @@ class StackFrame {
 	  * to be ignored in parsing. */
 	isDead: boolean;
 
+	/** Special variables redefined in this scope. */
+	scope?: {[name: string]: boolean} | false;
+
+	/** Special variables redefined in the next sibling scope. */
+	scopeNext?: {[name: string]: boolean};
+
+	/** Required maximum start position of next sibling or child scope,
+	  * for variable redefinitions to apply. */
+	scopeStart: number;
+
 	/** Name to ensure opening and closing JSX elements match. */
 	element?: string;
 	/** Flag whether element is closing (starts with a slash). */
@@ -185,6 +216,15 @@ class StateStack {
 
 	track(depth: number) {
 		this.get(depth + 1).tracking = true;
+	}
+
+	lookup(name: string, depth: number) {
+		do {
+			const frame = this.frames[depth];
+			if(frame.scope && frame.scope[name]) return true;
+		} while(depth--);
+
+		return false;
 	}
 
 	frames: StackFrame[] = [new StackFrame()];
@@ -318,7 +358,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 		switch(token) {
 			case '(': case '{': case '[':
 
-				state = stack.get(depth + 1).clear(stack.frames[depth]);
+				state = stack.get(depth + 1).clear(last, stack.frames[depth]);
 				state.rootToken = token;
 
 				if(state.tracking) {
@@ -437,7 +477,7 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 				) {
 					if(text.charAt(last + 1) != '/') {
 						// Capture an opening element in the stack.
-						state = stack.get(depth + 1).clear(stack.frames[depth]);
+						state = stack.get(depth + 1).clear(last, stack.frames[depth]);
 						state.element = parts[1];
 						state.isClosing = false;
 
@@ -562,28 +602,28 @@ function parseSyntax(parser: TranslateConfig, uri?: string) {
 	}
 }
 
-const formatTbl: {
-	[token: string]: [
-		/** Module format suggested by the token. */
-		ModuleFormat,
-		/** Flag whether detection is certain enough to stop parsing. */
-		boolean,
-		/** Immediately following content must match to trigger detection. */
-		RegExp,
-		/** Immediately preceding content must NOT match or format is blacklisted for this file! */
-		RegExp | null
-	]
-} = ({
+type FormatSpec = [
+	/** Module format suggested by the token. */
+	ModuleFormat,
+	/** Flag whether detection is certain enough to stop parsing. */
+	boolean,
+	/** Immediately following content must match to trigger detection. */
+	RegExp
+	/** Immediately preceding content must NOT match or format is blacklisted for this file! */
+	// RegExp | null
+];
+
+const formatTbl: { [token: string]: FormatSpec } = ({
 	// AMD modules contain calls to the define function.
-	'define': ['amd', true, reCallLiteral, reSet],
-	'System': ['system', true, reRegister, reSet],
+	'define': ['amd', true, reCallLiteral],
+	'System': ['system', true, reRegister],
 	// require suggests CommonJS, but AMD also supports require()
 	// so keep trying to detect module type.
-	'require': ['cjs', false, reCallLiteral, null],
+	'require': ['cjs', false, reCallLiteral],
 	// CommonJS modules use exports or module.exports.
 	// AMD may use them, but a surrounding define should come first.
-	'module': ['cjs', true, reModuleExports, null],
-	'exports': ['cjs', true, reExports, null]
+	'module': ['cjs', true, reModuleExports],
+	'exports': ['cjs', true, reIsMemberAccess]
 });
 
 /** Detect module format (AMD, CommonJS or ES) and report all CommonJS dependencies.
@@ -604,32 +644,12 @@ export class Parser implements TranslateConfig {
 	 * @return True if module format was detected, false otherwise. */
 
 	guessFormat(
-		token: string,
-		depth: number,
-		pos: number,
-		last: number
+		format: FormatSpec,
+		chunkAfter: string
 	) {
-		const format = formatTbl[token];
-		const record = this.record;
-
-		if(format && !record.formatBlacklist[format[0]]) {
-			const text = this.text;
-			const len = Math.min(last, chunkSize);
-
-			// Get some input immediately before and after the token,
-			// for quickly testing regexp matches.
-			const chunkAfter = text.substr(pos, chunkSize);
-
-			if(format[3] && format[3]!.test(text.substr(last - len, len))) {
-				// Redefining the module syntax makes known usage patterns unlikely.
-				record.formatBlacklist[format[0]] = true;
-				return false;
-			}
-
-			if(format[2].test(chunkAfter)) {
-				record.format = format[0];
-				return format[1];
-			}
+		if(format[2].test(chunkAfter)) {
+			this.record.format = format[0];
+			return format[1];
 		}
 
 		return false;
@@ -795,17 +815,44 @@ export class Parser implements TranslateConfig {
 			}
 		}
 
-		if(!this.formatKnown) {
-			this.formatKnown = this.guessFormat(token, depth, pos, last);
-		}
+		const format = formatTbl[token];
 
-		if(token == this.requireToken) {
+		if(format) {
+			// Get some input immediately before and after the token,
+			// for quickly testing regexp matches.
+			const chunkLen = Math.min(last, chunkSize);
+			const chunkBefore = text.substr(last - chunkLen, chunkLen);
 			const chunkAfter = text.substr(pos, chunkSize);
-			const match = reCallString.exec(chunkAfter);
+			let scopeStartToken: RegExp | undefined;
 
-			if(match) {
-				// Called with a string surrounded in matching quotations.
-				record.addDep(match[1].substr(1, match[1].length - 2));
+			if(reIsVariable.test(chunkBefore)) {
+				(state.scope || (state.scope = {}))[token] = true;
+			} else if(reIsParamBefore.test(chunkBefore)) {
+				scopeStartToken = /\)\s*\{/;
+			} else if(reIsParamAfter.test(chunkAfter)) {
+				scopeStartToken = /=>\s*/;
+			} else if(!stack.lookup(token, depth)) {
+				if(!this.formatKnown) {
+					this.formatKnown = this.guessFormat(format, chunkAfter);
+				}
+
+				if(token == this.requireToken) {
+					const match = reCallString.exec(chunkAfter);
+
+					if(match) {
+						// Called with a string surrounded in matching quotations.
+						record.addDep(match[1].substr(1, match[1].length - 2));
+					}
+				}
+			}
+
+			if(scopeStartToken) {
+				const match = chunkAfter.match(scopeStartToken);
+
+				if(match) {
+					(state.scopeNext || (state.scopeNext = {}))[token] = true;
+					state.scopeStart = pos + match.index! + match[0].length + 2;
+				}
 			}
 		}
 	}
