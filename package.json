@@ -1,6 +1,6 @@
 {
   "name": "requirex",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A different kind of module loader",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -12,12 +12,11 @@
   "scripts": {
     "tsc": "tsc",
     "rollup": "rollup",
-    "start": "./example/browser/serve.bat || example\\browser\\serve.bat",
-    "example": "node bin/requirex ./example/node/test.ts",
     "watch": "cd src && tsc --watch",
+    "watch:test": "cd test && tsc --watch",
     "build:umd": "cd src && tsc -m es6 --outdir ../dist/esm && rollup -c && uglifyjs ../dist/umd/index.js -c -m > ../dist/umd/index.min.js",
-    "prepublish": "tsc -p src && (checkver lt 5.0.0 || npm run build:umd)",
-    "test": "cd test && npm test"
+    "prepare": "tsc -p src && (checkver lt 5.0.0 || npm run build:umd)",
+    "test": "cd test && node run.js ./tests.ts"
   },
   "author": "Juha Järvi",
   "license": "MIT",
@@ -39,12 +38,13 @@
     "systemjs"
   ],
   "devDependencies": {
-    "@types/node": "^12.12.7",
+    "@types/node": "^13.13.5",
     "autoroll": "^0.2.0",
     "mrepo": "0.0.2",
-    "rollup": "^1.27.0",
-    "typescript": "^3.7.2",
-    "uglify-js": "^3.6.9"
+    "requirex-postcss-bundle": "^0.3.0",
+    "rollup": "^2.8.2",
+    "typescript": "^3.8.3",
+    "uglify-js": "^3.9.2"
   },
   "dependencies": {
     "@lib/base64": "^0.1.0",

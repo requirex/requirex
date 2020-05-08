@@ -1,208 +1,214 @@
-import { URL, getDir } from './URL';
-import { ModuleType } from './Module';
-import { Package } from './Package';
-import { PackageManager } from './PackageManager';
-import { Record, DepRef, ModuleFormat } from './Record';
-import { features, origin, keys, assign, emptyPromise } from './platform';
-import { FetchResponse, FetchOptions } from './fetch';
+import { FetchResponse, FetchOptions } from './platform/fetch';
+import { URL } from './platform/URL';
+import { features } from './platform/features';
+import { location, origin } from './platform/browser';
+import { getCallerKey, nodeRequire } from './platform/node';
+import { Zalgo, assign, keys, getDir, stripSlash, appendSlash, emptyPromise } from './platform/util';
+import { WorkerManager } from './worker/WorkerManager';
+import { WorkerCallee } from './worker/WorkerCallee';
+import { RequireX } from './RequireX';
+import { Status, Importation } from './Status';
+import { ModuleObject } from './ModuleObject';
+import { Package } from './packages/Package';
+import { Record, BuiltSpec } from './Record';
+import {
+	LoaderPlugin,
+	BasePlugin,
+	PluginStack,
+	PluginSpec,
+	nextResolveSync,
+	nextResolve,
+	nextFetch,
+	nextFetchRecord,
+	nextAnalyze,
+	nextTranslate,
+	nextInstantiate,
+	nextBuild,
+	nextBuilt,
+	nextCache
+} from './Plugin';
 
-export interface LoaderPlugin {
-	fetchRecord?(record: Record): Promise<void>;
-	fetch?(url: string): Promise<FetchResponse>;
-
-	resolveSync?(key: string, baseKey: string, ref?: DepRef): string;
-	resolve?(key: string, baseKey: string, ref?: DepRef): Promise<string> | string;
-
-	discover?(record: Record): Promise<void> | void;
-
-	translate?(record: Record): Promise<void> | void;
-
-	update?(record: Record): Promise<void> | void;
-
-	instantiate?(record: Record): any;
-
-	wrap?(record: Record): string;
-}
+const defaultExtension = 'js';
 
 export interface LoaderConfig {
+
 	baseURL?: string;
-	cdn?: string;
+
+	/** Currect working directory. */
+	cwd?: string;
+
+	/** Global variables exposed to instantiated code. */
 	globals?: { [name: string]: any };
-	plugins?: { [name: string]: { new(loader: Loader): LoaderPlugin } };
-	/** Predefined module contents mapped to import names. */
-	registry?: { [name: string]: any };
 
-	/** Suggested dependency versions, format is like in package.json. */
-	dependencies?: { [name: string]: string };
+	/** Starting point for finding packages needed to support different module
+	  * formats and markup languages. Default: file making the first import. */
+	libraryBaseKey?: string;
 
+	/** Overrides for package name resolution. */
 	map?: { [name: string]: string };
 
-	mainFields?: string[];
+	/** Factory functions for loader plugins. */
+	plugins?: PluginSpec[];
 
-	/** Transpile imported CSS using PostCSS? */
-	postCSS?: boolean;
-	/** Minify transpiled CSS? */
-	minifyCSS?: boolean;
+	pluginConfig?: { isBuild?: boolean };
+
+	specials?: { [name: string]: PluginSpec[] };
+
+	/** Module contents mapped to predefined import names. */
+	registry?: { [name: string]: any };
+
 }
 
-export interface SystemDeclaration {
-	setters?: ((val: any) => void)[];
-	execute?: () => any;
-	exports?: any;
-}
+export class Loader {
 
-export type SystemFactory = (exports?: any, module?: ModuleType) => SystemDeclaration;
+	constructor(public external: RequireX) {
+		/** Currect working directory. */
+		let cwd: string;
+		let baseURL: string | undefined;
 
-/** Serialized form of a bundled package. */
-
-export interface BuiltSpec {
-	/** Package name. */
-	name: string;
-	version: string;
-	root: string;
-	main: string;
-	/** Browser import mappings from package.json. */
-	map: { [key: string]: string };
-	/** File names, formats and dependency names mapped to their index in the
-	  * bundle, or -1 if defined elsewhere. */
-	files: [string, ModuleFormat, { [importKey: string]: number }, any][];
-}
-
-function getAllDeps(
-	record: Record,
-	depTbl: { [key: string]: Record },
-	depList: Record[]
-) {
-	depTbl[record.resolvedKey] = record;
-	depList.push(record);
-
-	for(let name of record.depList) {
-		const dep = record.depTbl[name]!.record;
-
-		if(dep && !depTbl[dep.resolvedKey]) getAllDeps(dep, depTbl, depList);
-	}
-
-	return depList;
-}
-
-function handleExtension(loader: Loader, key: string, ref?: DepRef) {
-	let format = ref && ref.format;
-	let pos = key.lastIndexOf('/') + 1;
-	let ext: string | undefined;
-
-	// Check for recognized file extensions starting from
-	// the most specific, like .d.ts followed by .ts.
-	while((pos = key.indexOf('.', pos) + 1) && !format) {
-		ext = key.substr(pos).toLowerCase();
-		format = loader.plugins[ext] && ext;
-	}
-
-	if(ref) ref.format = format;
-
-	return key;
-}
-
-function appendSlash(key: string) {
-	return key.replace(/([^/]|^)$/, '$1/');
-}
-
-function fetchTranslate(loader: Loader, instantiate: true, importKey: string, parent?: string): Promise<any>;
-function fetchTranslate(loader: Loader, instantiate: false, importKey: string, parent?: string): Promise<Record>;
-function fetchTranslate(loader: Loader, instantiate: boolean, importKey: string, parent?: string) {
-	if((instantiate && loader.registry[importKey]) || loader.records[importKey]) {
-		// TODO: avoid unnecessary repeated resolution and / or translation.
-	}
-
-	if(!parent && features.isNode) {
-		// If no parent module is known,
-		// in Node.js we can still use the calling file's path.
-
-		const hook = 'prepareStackTrace';
-		const prepareStackTrace = Error[hook];
-		Error[hook] = (err, stack) => stack;
-
-		let name = (new Error().stack as any as NodeJS.CallSite[])[2].getFileName();
-
-		if(!name || typeof name != 'string' || name.charAt(0) == '[') {
-			name = appendSlash(loader.cwd);
+		if(origin && location) {
+			cwd = getDir(location.pathname) || '/';
+			baseURL = origin + appendSlash(cwd);
+		} else {
+			cwd = (features.isNode && stripSlash(process.cwd())) || '/';
 		}
 
-		parent = URL.fromLocal(name);
+		this.config = { baseURL, cwd };
+		this.pluginStack = { plugin: new BasePlugin(this) };
 
-		if(!loader.firstParent) loader.firstParent = parent;
-
-		Error[hook] = prepareStackTrace;
+		const manager = features.hasWorker && WorkerManager.createManager();
+		if(manager) this.workerManager = manager;
 	}
 
-	const ref: DepRef = { isImport: true, package: loader.package };
-
-	const result = loader.resolve(importKey, parent && URL.resolve(parent, '.'), ref).then((resolvedKey: string) =>
-		(instantiate && loader.registry[resolvedKey] && loader.registry[resolvedKey].exports) ||
-		// Detect and resolve all recursive dependencies.
-		loader.discoverRecursive(resolvedKey, importKey, ref!, instantiate).then(
-			(record?: Record) => record && record.init(loader, instantiate)
-		)
-	);
-
-	return result;
-}
-
-export class Loader implements LoaderPlugin {
-
-	constructor(config?: LoaderConfig) {
-		config = config || {};
-
-		this.cwd = (
-			(origin && getDir(window.location.pathname)) ||
-			// TODO: Convert backslashes?
-			(features.isNode && process.cwd()) ||
-			'/'
-		);
-
-		this.baseURL = origin && origin + appendSlash(this.cwd);
-
-		this.config(config);
+	setCallee(worker: WorkerCallee) {
+		this.workerCallee = worker;
 	}
 
-	config(config: LoaderConfig) {
-		if(config.baseURL) this.baseURL = config.baseURL;
-		if(config.cdn) this.manager.registerCDN(config.cdn);
+	/** Apply new configuration options. */
 
+	setConfig(config: LoaderConfig) {
+		// Copy contents of new configuration with recursion depth 1
+		// to also keep current plugins, globals and registry.
+		assign(this.config, config, 1);
+
+		// Set up modules with predefined exports objects.
 		const registry = config.registry || {};
 
 		for(let name of keys(registry)) {
-			this.registry[name] = { exports: registry[name], id: name };
+			const module = { exports: registry[name], id: name };
+			const record = new Record(name, this.newImportation(name));
+
+			record.moduleInternal = module;
+			record.fetched = Promise.resolve(record);
+
+			this.registry[name] = module;
+			this.records[name] = record;
 		}
 
-		const plugins = config.plugins || {};
+		// Initialize loader plugins.
+		const plugins = config.plugins || [];
+		let num = plugins.length;
 
-		for(let name of keys(plugins)) {
-			const plugin = new plugins[name](this);
-			this.plugins[name.toLowerCase()] = plugin;
+		while(num--) {
+			this.pluginStack = {
+				plugin: this.initPlugin(plugins[num]),
+				next: this.pluginStack
+			};
 		}
 
-		const dependencies = config.dependencies || {};
+		// Initialize records that have their own custom plugins.
+		const specials = config.specials || {};
 
-		for(let name of keys(dependencies)) {
-			const meta = this.manager.registerMeta(name);
-			if(!meta.suggestedVersion) meta.suggestedVersion = dependencies[name];
+		for(let name of keys(specials)) {
+			const record = new Record(name, this.newImportation(name));
+
+			for(let plugin of specials[name]) {
+				record.addPlugin(this.initPlugin(plugin));
+			}
+
+			this.records[name] = record;
 		}
 
-		const map = config.map || {};
-
-		for(let name of keys(map)) {
-			assign(this.package.map, map, 0);
-		}
-
-		assign(this.globalTbl, config.globals || {});
-		assign(this.currentConfig, config, 1);
+		// Apply package name resolution overrides.
+		assign(this.package.map, config.map || {}, 0);
 	}
 
-	getConfig() {
-		return this.currentConfig;
+	/** Initialize a loader plugin.
+	  *
+	  * @param plugin Factory function, calling the plugin constructor
+	  * curried with configuration options.
+	  * @return Plugin instance. */
+
+	initPlugin(spec: PluginSpec) {
+		const id = spec.Plugin.prototype.id;
+		let pluginInstance = this.pluginTbl[id];
+
+		if(!pluginInstance) {
+			const manager = this.workerManager;
+			const callee = this.workerCallee;
+			const { Plugin, Worker } = spec;
+			// If the plugin has a separate worker class, check if Web Workers
+			// are available. If unsupported or inside a worker, run methods
+			// in the current thread.
+			const workerInstance = Worker && (!manager ? new Worker(this, spec.config) :
+				// Set up an RPC proxy passing method calls to workers.
+				manager.makeProxy(Worker.prototype, id)
+			);
+
+			pluginInstance = new Plugin(this, spec.config, workerInstance);
+
+			if(manager) {
+				manager.register(Plugin, pluginInstance);
+			}
+
+			if(callee) {
+				// Inside workers, register the plugin's worker class
+				// to handle incoming messages.
+				if(Worker && workerInstance) callee.register(id, workerInstance);
+				callee.makeProxy(Plugin);
+			}
+
+			this.pluginTbl[id] = pluginInstance;
+		}
+
+		return pluginInstance;
 	}
 
-	eval(code: string, resolvedKey?: string, importKey?: string) {
+	/** Set up metadata for coordinating a recursive import.
+	  *
+	  * @return Status object used during the import process. */
+
+	newStatus() {
+		const status: Status = {
+			importTbl: {},
+			document: features.doc
+		};
+
+		return status;
+	}
+
+	/** Set up metadata for importing a single file. */
+
+	newImportation(
+		importKey: string,
+		baseKey?: string,
+		status?: Status,
+		resolveStack?: PluginStack
+	) {
+		const importation: Importation = {
+			baseKey: baseKey || this.config.baseURL,
+			extensionList: [],
+			importKey,
+			package: this.package,
+			pluginStack: this.pluginStack,
+			resolveStack: resolveStack || this.pluginStack,
+			status: status || this.defaultStatus
+		};
+
+		return importation;
+	}
+
+	/* eval(code: string, resolvedKey?: string, importKey?: string) {
 		const inline: DepRef = {
 			format: 'js',
 			sourceCode: code,
@@ -215,31 +221,33 @@ export class Loader implements LoaderPlugin {
 		return this.discoverRecursive(resolvedKey, importKey, inline, true).then(
 			(record?: Record) => record && record.init(this, true)
 		)
-	}
+	} */
 
 	/** Synchronous import, like Node.js require(). */
 
-	require(importKey: string, callerKey?: string, callerRecord?: Record) {
-		if(callerRecord) {
-			const ref = callerRecord.depTbl[importKey];
-			if(ref) {
-				return ref.module ? ref.module.exports : (
-					this.instantiate(ref.record!)
+	require(importKey: string, baseKey?: string, parent?: Record) {
+		if(parent) {
+			const importation = parent && parent.importTbl[importKey];
+
+			if(importation) {
+				return importation.module ? importation.module.exports : (
+					this.instantiate(importation.record!)
 				);
 			}
 		}
 
-		const resolvedKey = this.resolveSync(importKey, callerKey);
+		const resolvedKey = this.resolveSync(importKey, baseKey);
 		const moduleObj = this.registry[resolvedKey];
 
 		if(!moduleObj) {
-			if(typeof require == 'function' && resolvedKey.substr(0, 5) == 'file:') {
-				return require(URL.toLocal(resolvedKey));
+			if(resolvedKey.substr(0, 5) == 'file:') {
+				// TODO: Currently this silently returns an empty module on failure...
+				return nodeRequire(URL.toLocal(resolvedKey));
 			} else {
 				throw new Error(
 					'Module not already loaded loading "' + importKey +
 					'" as "' + resolvedKey + '"' +
-					(!callerKey ? '.' : ' from "' + callerKey + '".')
+					(!baseKey ? '.' : ' from "' + baseKey + '".')
 				);
 			}
 		}
@@ -247,275 +255,316 @@ export class Loader implements LoaderPlugin {
 		return moduleObj.exports;
 	}
 
-	/** @param key Name of module or file to import, may be a relative path.
-	  * @param parent Resolved URL of a possible parent module. */
+	/** Loader main entry point, called from the public API.
+	  * Resolve, fetch, translate and execute a file and all its dependencies.
+	  *
+	  * @param meta Object for storing output metadata,
+	  * to provide resolved custom plugin addresses during import. */
 
-	import(importKey: string, parent?: string) {
-		return fetchTranslate(this, true, importKey, parent);
-	}
+	import(importKey: string, baseKey?: string, meta?: { resolvedKey?: string }): Promise<any> {
+		/** Recursive import metadata, for handling circular dependencies etc. */
+		const status = this.newStatus();
 
-	resolveSync(key: string, callerKey?: string, ref?: DepRef) {
-		let plugin: LoaderPlugin | undefined;
+		status.isImport = true;
+		status.isInstantiation = true;
 
-		ref = ref || {};
-		const match = key.match(/([^/.]+)!(.*)$/);
+		if(!baseKey && features.isNode) {
+			// If no parent module is known,
+			// in Node.js we can still use the calling file's path.
 
-		if(match) {
-			const format = match[2] || match[1];
-
-			if(format) plugin = this.plugins[format];
-			if(plugin) {
-				ref.format = format;
-			} else {
-				ref.pluginArg = match[2];
-			}
-
-			key = key.substr(0, key.indexOf('!'));
+			baseKey = URL.fromLocal(
+				// Argument is number of stack frames between calls to
+				// RequireX.import and getCallerKey.
+				getCallerKey(2) ||
+				appendSlash(this.config.cwd!)
+			);
 		}
 
-		if(!plugin || !plugin.resolveSync) plugin = this.plugins.resolve;
+		if(!this.config.libraryBaseKey) {
+			// Use location of the first import as a starting point for
+			// finding third party packages required by loader plugins.
+			this.config.libraryBaseKey = baseKey;
+		}
 
-		callerKey = callerKey || this.baseURL || '';
-
-		let resolvedKey = (plugin && plugin.resolveSync ?
-			plugin.resolveSync(key, callerKey, ref) :
-			URL.resolve(callerKey, key)
-		);
-
-		return resolvedKey;
-	}
-
-	resolve(key: string, callerKey?: string, ref?: DepRef): Promise<string> {
-		let plugin: LoaderPlugin | undefined;
-
-		if(ref && ref.format) plugin = this.plugins[ref.format];
-		if(!plugin || !plugin.resolve) plugin = this.plugins.resolve;
-
-		callerKey = callerKey || this.baseURL || '';
-
-		return Promise.resolve(plugin && plugin.resolve ?
-			plugin.resolve(key, callerKey, ref) :
-			this.resolveSync(key, callerKey, ref)
-		).then(
-			(resolvedKey: string) => handleExtension(this, resolvedKey, ref)
-		).catch(
-			() => this.resolveSync(key, callerKey, ref)
+		return Promise.resolve(this.resolveFetchAnalyzeAll(importKey, baseKey, status)).then(
+			(record) => this.translateInstantiate(record, status, importKey, meta)
 		);
 	}
 
-	fetch(url: string, options?: FetchOptions) {
-		const plugin = this.plugins['cache'];
+	translateInstantiate(record: Record | undefined, status: Status, importKey: string, meta?: { resolvedKey?: string }) {
+		return record && Promise.resolve(this.translateAll(record, status, importKey)).then(() => {
+			if(meta) meta.resolvedKey = record!.resolvedKey;
 
-		return (
-			(plugin && plugin.fetch ? plugin.fetch : features.fetch).call(
-				plugin,
-				url,
-				options
-			) as Promise<FetchResponse>
-		).then((
-			(res) => res.ok ? res : Promise.reject(new Error('HTTP error ' + res.status + ' fetching ' + url))
-		) as (res: FetchResponse) => FetchResponse);
+			let result = this.instantiate(record!);
+			record = this.bundleMain;
+
+			if(record) {
+				result = this.analyzeAll(record, status, record.resolvedKey).then(
+					(record) => this.translateInstantiate(record, status, record.resolvedKey)
+				);
+
+				this.bundleMain = void 0;
+			}
+
+			return result;
+		});
 	}
 
-	fetchRecord(record: Record) {
-		let plugin = this.plugins[record.format!];
+	resolveFetchAnalyzeAll(
+		importKey: string,
+		baseKey: string | undefined,
+		status: Status,
+		/** Record for file / script making the import. */
+		parent?: Record
+	) {
+		// Re-use previous result if the exact same unresolved import name was
+		// already used in the same parent record.
+		let importation = (parent && parent.importTbl[importKey]) as Importation;
 
-		if(!plugin || !plugin.fetchRecord) plugin = this.plugins['cache'];
+		// If no parent record was given, try to find one for the
+		// importing address.
+		parent = parent || (baseKey && this.records[baseKey]) || parent;
 
-		if(plugin && plugin.fetchRecord) return plugin.fetchRecord(record);
-
-		let fetched: Promise<string>;
-
-		if(record.sourceCode) {
-			fetched = Promise.resolve(record.sourceCode);
+		if(importation) {
+			if(importation.result) return importation.result;
+			importation.status = status;
 		} else {
-			fetched = this.fetch(record.resolvedKey).then(
-				(res: FetchResponse) => res.text()
+			importation = this.newImportation(
+				importKey,
+				baseKey,
+				status,
+				parent && parent.resolveStack
 			);
 		}
 
-		return fetched.then((text: string) => {
-			record.sourceCode = text;
-		});
+		if(parent) {
+			// Cache result for parent record and unresolved import name.
+			parent.importTbl[importKey] = importation;
+			importation.parent = parent;
+		} else {
+			// If parent record is unknown, its resolve hook cannot define
+			// default file extensions, so handle that here.
+			importation.extensionList = [defaultExtension];
+		}
+
+		// Resolve, fetch, analyze, repeat recursively for dependencies.
+		return importation.result = this.resolve(importKey, baseKey, importation).then(
+			(resolvedKey) => this.fetchAnalyzeAll(resolvedKey, importKey, importation)
+		);
 	}
 
-	/** Resolve and translate an imported dependency and its recursive dependencies.
-	  *
-	  * @param importKey Dependency name (module or file), may be a relative path.
-	  * @param record Import record of module referencing the dependency.
-	  * @param base Dependency hierarchy root to instantiate and return from
-	  * original import() call. */
-
-	discoverImport(importKey: string, record: Record, instantiate: boolean, base: Record) {
-		const ref = record.depTbl[importKey] || { isImport: true };
-		const discovered = this.resolve(
-			importKey,
-			record.resolvedKey,
-			ref
-		).then((resolvedDepKey: string) => {
-			// Avoid blocking on previously seen dependencies,
-			// to break circular dependency chains.
-			const importRecord = (
-				(ref.record = base.deepDepTbl[resolvedDepKey]) ||
-				this.discoverRecursive(resolvedDepKey, importKey, ref, instantiate, base)
-			);
-
-			// Bind imported name and the import record,
-			// to be registered (synchronously) when required.
-			record.resolveDep(importKey, ref);
-
-			return importRecord;
-		}).catch((err: NodeJS.ErrnoException) => {
-			if(err && err.message) {
-				err.message += '\n    importing ' + importKey + ' from ' + record.resolvedKey;
-			}
-			throw err;
-		});
-
-		return discovered;
-	}
-
-	/** Recursively fetch and translate a file and all its dependencies.
-	  *
-	  * @param resolvedKey Resolved URL address to fetch.
-	  * @param importKey Dependency name before resolving.
-	  * @param base Dependency hierarchy root to instantiate and return from
-	  * original import() call. */
-
-	discoverRecursive(
+	fetchAnalyzeAll(
 		resolvedKey: string,
 		importKey: string,
-		ref: DepRef,
-		instantiate: boolean,
-		base?: Record
-	): Promise<Record | undefined> {
-		const depModule = /* instantiate && */ this.registry[resolvedKey];
+		importation: Importation
+	) {
+		const status = importation.status;
+
+		// Bail out if record is already being imported, to avoid
+		// analyzing and following dependencies multiple times.
+		let fetched = status.importTbl[resolvedKey];
+		if(fetched) {
+			return fetched.then(
+				(record) => record && (importation.record = record)
+			);
+		}
+
+		// We are importing the record for the first time.
+		// Cache the fetch promise to avoid re-importing.
+		fetched = this.fetchRecord(resolvedKey, importation);
+		status.importTbl[resolvedKey] = fetched;
+
+		// After the first fetch is done, importation result still awaits
+		// analyzing and following dependencies. Results for later imports
+		// skip them, to avoid blocking on circular dependencies.
+		return fetched.then((record): Zalgo<Record | undefined> => {
+			if(record) {
+				importation.record = record;
+
+				// Some formats run eval() in the analyze step
+				// so inject globals before that.
+				record.addGlobals(this.config.globals || {});
+
+				return this.analyzeAll(record, status, importKey);
+			}
+		});
+	}
+
+	analyzeAll(record: Record, status: Status, importKey: string): Promise<Record> {
+		if(!record.isAnalyzed) record.extractSourceMap();
+
+		return this.analyze(record, importKey).then(() => {
+			if(!record.isTranslating) {
+				// Plugins used for resolving imports are determined after
+				// analyzing format of the importing file, before the format
+				// changes in the translation step.
+				record.resolveStack = record.pluginStack;
+			}
+
+			return Promise.all(record.importList.map((importKey) =>
+				this.resolveFetchAnalyzeAll(importKey, record.resolvedKey, status, record)
+			)).then(() => record)
+		});
+	}
+
+	resolveSync(importKey: string, baseKey?: string, importation?: Importation) {
+		if(!importation) {
+			importation = this.newImportation(importKey, baseKey);
+			importation.extensionList = [defaultExtension];
+		}
+
+		return nextResolveSync(importation, null);
+	}
+
+	resolve(importKey: string, baseKey?: string, importation?: Importation) {
+		if(!importation) {
+			importation = this.newImportation(importKey, baseKey);
+			importation.extensionList = [defaultExtension];
+		}
+
+		return Promise.resolve(
+			nextResolve(importation, null)
+		).catch(
+			() => this.resolveSync(importKey, baseKey, importation)
+		);
+	}
+
+	fetch(resolvedKey: string, options?: FetchOptions, ref?: Importation | Record) {
+		return Promise.resolve(
+			nextFetch(resolvedKey, options, null, (ref || this).pluginStack)
+		).then(
+			((res) => res.ok ? res : Promise.reject(new Error(
+				'HTTP error ' + res.status + ' fetching ' + resolvedKey
+			))) as (res: FetchResponse) => FetchResponse
+		);
+	}
+
+	fetchRecord(resolvedKey: string, importation: Importation): Promise<Record | undefined> {
+		const moduleObject = this.registry[resolvedKey];
 		let record = this.records[resolvedKey];
 
-		if(depModule) {
-			// Bind already registered modules as-is.
-			ref.module = depModule;
-			if(!record) return emptyPromise;
+		if(moduleObject) {
+			importation.module = moduleObject;
+			return Promise.resolve(record);
 		} else if(!record) {
-			record = new Record(this, resolvedKey, importKey, ref.package);
-			record.sourceKey = ref.sourceKey;
-			record.sourceOriginal = ref.sourceOriginal;
-			record.eval = ref.eval;
+			record = new Record(resolvedKey, importation);
 			this.records[resolvedKey] = record;
 		}
 
-		base = base || record;
-
-		// Store import record in table and wait for it to be translated
-		base.deepDepTbl[resolvedKey] = record;
-		// Add new recursive dependency to list.
-		base.deepDepList.push(record);
-
-		if(!record.discovered) {
-			if(ref.format) record.format = ref.format as any;
-			if(ref.sourceCode) record.sourceCode = ref.sourceCode;
-
-			record.discovered = this.fetchRecord(record).then(
-				() => this.discover(record)
-			).catch((err: NodeJS.ErrnoException) => {
-				if(err && err.message) {
-					err.message += '\n    translating ' + record.resolvedKey;
-				}
-				throw err;
-			}).then(() => Promise.all(record.depList.map(
-				// Resolve and translate each imported dependency.
-				(key: string) => this.discoverImport(key, record, instantiate, base!)
-			))).then(() => record);
-		}
-
-		// Store import record in table and wait for it to be translated.
-		ref.record = record;
-
-		return record.discovered;
+		return record.fetched || (
+			record.fetched = Promise.resolve(
+				nextFetchRecord(record, importation, null)
+			).then(
+				() => record!
+			)
+		);
 	}
 
-	discover(record: Record): Promise<void> | void {
-		let format: ModuleFormat | undefined;
-		let plugin: LoaderPlugin;
-		let result: Promise<void> | void;
+	analyzeSync(record: Record, importKey: string) {
+		let frame: PluginStack;
+		let result: Zalgo<void> | undefined;
 
-		record.addGlobals(this.globalTbl);
+		if(!record.isAnalyzed) {
+			record.extractSourceMap();
 
-		do {
-			format = record.format;
-			plugin = this.plugins[format!];
-			if(!plugin || !plugin.discover) return;
+			do {
+				frame = record.pluginStack;
+				result = result || nextAnalyze(record, importKey, null);
+			} while(record.pluginStack != frame);
 
-			result = plugin.discover(record);
+			record.isAnalyzed = true;
+		}
 
-			if(typeof result == 'object' && typeof result.then == 'function') {
-				return result.then(() => {
-					if(record.format != format) return this.discover(record);
-				});
+		return result;
+	}
+
+	translateSync(record: Record, importKey: string) {
+		let frame: PluginStack;
+		let result: Zalgo<void> | undefined;
+
+		record.isTranslating = true;
+
+		while(1) {
+			frame = record.pluginStack;
+			result = result || nextTranslate(record, null);
+
+			if(record.pluginStack == frame) break;
+
+			// Re-analyze if plugins change.
+			record.isAnalyzed = void 0;
+			result = result || this.analyzeSync(record, importKey);
+		}
+
+		return result;
+	}
+
+	analyze(record: Record, importKey: string): Promise<void> {
+		if(record.isAnalyzed) return emptyPromise;
+
+		const frame = record.pluginStack;
+
+		return Promise.resolve(nextAnalyze(record, importKey, null)).then(() => {
+			// Re-analyze if plugins change.
+			if(record.pluginStack != frame) {
+				return this.analyze(record, importKey);
+			} else {
+				record.isAnalyzed = true;
 			}
-		} while(record.format != format);
+		});
 	}
 
-	translate(record: Record): Promise<void> {
-		const format = record.format;
+	translate(record: Record, status: Status, importKey: string): Promise<void> {
+		const frame = record.pluginStack;
+		record.isTranslating = true;
 
-		// Avoid translating code twice using the same format.
-		if(record.translated == format) return emptyPromise;
-		record.translated = format;
+		return Promise.resolve(nextTranslate(record, null)).then(() => {
+			// Re-analyze if plugins change.
+			if(record.pluginStack != frame) {
+				record.isAnalyzed = void 0;
+				return this.analyzeAll(record, status, importKey).then(
+					() => this.translate(record, status, importKey)
+				);
+			} else {
+				return this.cache(record);
+			}
+		});
+	}
 
-		const plugin = this.plugins[format!];
+	translateAll(record: Record, status: Status, importKey: string): Promise<void> {
+		return record.isTranslating ? emptyPromise : this.translate(record, status, importKey).then(
+			() => Promise.all(record.importList.map((importKey) => {
+				const dep = record.importTbl[importKey]!.record;
+				return dep && this.translateAll(dep, status, importKey);
+			}))
+		).then(() => { });
+	}
 
-		if(plugin && plugin.translate) {
-			const source = record.sourceCode;
-
-			return Promise.resolve(
-				plugin.translate(record)
-			).then(() => {
-				if(record.sourceCode != source) {
-					record.isDirty = true;
-				}
-
-				if(record.format != format) {
-					return Promise.resolve(
-						this.discover(record)
-					).then(
-						() => this.translate(record)
-					);
-				}
-			});
-		} else if(!record.moduleInternal) {
-			record.moduleInternal = {
-				exports: {},
-				id: record.resolvedKey
-			};
+	cache(record: Record) {
+		if(record.isDirty) {
+			record.isDirty = false;
+			return nextCache(record, null);
 		}
-
-		return emptyPromise;
-	}
-
-	update(record: Record) {
-		const plugin = this.plugins['cache'];
-
-		if(plugin && plugin.update) return plugin.update(record);
 	}
 
 	instantiate(record: Record) {
-		const plugin = this.plugins[record.format!];
+		if(!record) debugger;
+		if(!record.moduleInternal) return;
 
-		if(record.isInstantiated || !plugin || !plugin.instantiate) {
-			return record.moduleInternal.exports;
-		}
+		const exportsOld = record.moduleInternal!.exports;
 
+		if(record.isInstantiated) return exportsOld;
 		record.isInstantiated = true;
 
-		if(record.loadError) {
+		/* if(record.loadError) {
 			throw record.loadError;
-		}
+		} */
 
 		try {
-			const exportsOld = record.moduleInternal.exports;
-			const exportsNew = plugin.instantiate(record);
-			this.registry[record.resolvedKey] = record.moduleInternal;
+			const exportsNew = nextInstantiate(record, null);
+
+			// TODO
+			const cacheKey = record.resolvedKey;
+			this.registry[cacheKey] = record.moduleInternal;
 
 			if(exportsNew != exportsOld) {
 				// TODO: for circular deps, the previous exports may be in use!
@@ -532,184 +581,106 @@ export class Loader implements LoaderPlugin {
 		}
 	}
 
-	register(deps: string[], factory: SystemFactory) {
-		let record = this.latestRecord;
+	build(importKey: string, baseKey?: string) {
+		const status = this.newStatus();
 
-		if(record) {
-			for(let dep of deps) {
-				record.depNumList.push(record.addDep(dep) + 3);
-			}
+		status.isImport = false;
+		status.isInstantiation = false;
 
-			record.factory = factory;
-		}
-	}
+		return Promise.resolve(this.resolveFetchAnalyzeAll(importKey, baseKey, status)).then((record) => {
+			if(!record) throw new Error('Error fetching ' + importKey + ' for bundling');
 
-	wrap(record: Record) { return 'null' }
-
-	analyze(importKey: string, parent?: string) {
-		return fetchTranslate(this, false, importKey, parent).then((record: Record) => {
-			const pkgTbl: { [name: string]: { package: Package, records: Record[] } } = {};
-
-			for(let dep of getAllDeps(record, {}, [])) {
-				const pkg = dep.pkg || this.manager.getPackage(dep.resolvedKey) || this.package;
-				let spec = pkgTbl[pkg.name];
-
-				if(!spec) {
-					spec = { package: pkg, records: [] };
-					pkgTbl[pkg.name] = spec;
-				}
-
-				spec.records.push(dep);
-			}
-
-			return pkgTbl;
+			return Promise.resolve(
+				this.translateAll(record, status, importKey)
+			).then(
+				() => nextBuild(record, baseKey || this.config.baseURL || '', null)
+			);
 		});
 	}
 
-	/** Bundle a script and all of its dependencies
-	  * for production or demoing purposes. */
-
-	build(importKey: string, parent?: string) {
-		return this.analyze(importKey, parent).then((pkgTbl) => {
-			const pkgList = keys(pkgTbl).sort();
-			let num = 0;
-
-			for(let name of pkgList) {
-				for(let dep of pkgTbl[name].records.sort((a: Record, b: Record) =>
-					+(a.resolvedKey < b.resolvedKey) - +(a.resolvedKey > b.resolvedKey)
-				)) {
-					dep.num = num++;
-				}
-			}
-
-			const str = JSON.stringify;
-
-			return 'System.built(1,[{\n\t' + pkgList.map((name: string) => {
-				const spec = pkgTbl[name];
-				const pkg = spec.package;
-				const fields = ['name: ' + str(pkg.name)];
-
-				if(pkg.version) fields.push('version: ' + str(pkg.version));
-				if(pkg.root) {
-					fields.push('root: ' + str(
-						parent ? URL.relative(parent, pkg.root) : pkg.root
-					));
-				}
-				if(pkg.main) fields.push('main: ' + str(pkg.main));
-
-				fields.push(
-					'map: ' + str(pkg.map),
-					'files: [\n\t\t[\n' + spec.records.map((record: Record) => {
-						const plugin = this.plugins[record.format!] || this;
-						const code = (plugin.wrap ? plugin : this).wrap!(record);
-
-						const deps: string[] = [];
-
-						for(let depName of record.depList.slice(0).sort()) {
-							const dep = record.depTbl[depName]!.record;
-							deps.push(str(depName) + ': ' + (dep ? dep.num : -1));
-						}
-
-						return '\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
-							str(URL.relative(pkg.root + '/', record.resolvedKey)),
-							str(record.format),
-							'{' + deps.join(', ') + '}',
-							code
-						].join(', ');
-					}).join('\n\t\t], [\n') + '\n\t\t]\n\t]'
-				);
-
-				return fields.join(',\n\t');
-			}).join('\n}, {\n\t') + '\n}]);';
-		});
-	}
-
-	/** Load a bundled script (together with dependencies),
-	  * which should include a call to this method. */
-
-	built(version: number, specList: BuiltSpec[]) {
-		if(version != 1) throw(new Error('Unsupported bundle format'));
-
+	built(main: number, specList: BuiltSpec[]) {
+		const packageList = nextBuilt(
+			specList,
+			this.config.baseURL || this.config.libraryBaseKey || '',
+			null,
+			this.pluginStack
+		);
 		const recordList: Record[] = [];
 		const depsList: { [importKey: string]: number }[] = [];
-		let num = 0;
+		let specNum = 0;
+		let recordNum = 0;
 
 		for(let pkgSpec of specList) {
-			const root = pkgSpec.root && URL.resolve(this.baseURL || this.firstParent || '', pkgSpec.root);
-			const pkg = new Package(pkgSpec.name, root);
-			pkg.version = pkgSpec.version;
-			pkg.main = pkgSpec.main;
-			pkg.map = pkgSpec.map;
-
-			this.manager.registerPackage(pkg);
+			const pkg = packageList[specNum++];
 
 			for(let [key, format, deps, compiled] of pkgSpec.files) {
-				const resolvedKey = !pkg.root ? key : URL.resolve(pkg.root + '/', key);
-				const record = new Record(this, resolvedKey);
+				const resolvedKey = !pkg.rootKey ? key : URL.resolve(pkg.rootKey + '/', key);
+				let record = this.records[resolvedKey];
 
-				record.format = format;
-				record.compiled = compiled;
-				record.discovered = Promise.resolve(record);
+				if(!record) {
+					record = new Record(resolvedKey, this.newImportation(resolvedKey));
+					record.addPlugin(this.pluginTbl[format]);
+					record.addGlobals(this.config.globals || {});
+					record.compiled = compiled;
+					record.fetched = Promise.resolve(record);
 
-				this.records[resolvedKey] = record;
-				recordList[num] = record;
-				depsList[num++] = deps;
+					this.records[resolvedKey] = record;
+				}
+
+				recordList[recordNum] = record;
+				depsList[recordNum++] = deps;
 			}
 		}
 
-		num = 0;
+		recordNum = 0;
 
 		for(let record of recordList) {
-			const deps = depsList[num++];
+			const deps = depsList[recordNum++];
 
 			for(let key of keys(deps)) {
 				const depNum = deps[key];
 
-				record.addDep(
-					key,
-					(depNum < 0 ?
-						{ module: this.registry[key] } :
-						{ record: recordList[depNum] }
-					)
-				);
+				const importation = this.newImportation(key);
+				importation.result = emptyPromise;
+
+				if(depNum < 0) {
+					importation.module = this.registry[key];
+				} else {
+					importation.record = recordList[depNum];
+				}
+
+				record.addImport(key, importation);
 			}
 
-			if(this.discover(record)) {
-				throw(new Error('Async discover plugins are not supported in bundles'));
+			if(
+				this.analyzeSync(record, record.resolvedKey) ||
+				this.translateSync(record, record.resolvedKey)
+			) {
+				throw new Error('Async plugins are not supported in bundles');
 			}
-
-			this.translate(record);
 		}
+
+		this.bundleMain = recordList[main];
 	}
 
-	private currentConfig: LoaderConfig = {};
+	private workerManager?: WorkerManager;
+	workerCallee?: WorkerCallee;
 
-	manager = new PackageManager(this.currentConfig);
+	/** Default plugin stack applied to all imports. */
+	pluginStack: PluginStack;
+
+	/** Current configuration options. */
+	config: LoaderConfig = {};
+
+	pluginTbl: { [name: string]: LoaderPlugin } = {};
+
+	/** Root package for modules without a path, such as the Node.js API. */
 	package = new Package('_', '');
 
-	/** Paths to node-modules directories containing modules under development,
-	  * to avoid aggressively caching their contents and better support
-	  * boennemann/alle. */
+	private defaultStatus = this.newStatus();
 
-	modulesBustTbl: { [resolvedRoot: string]: boolean } = {};
-
-	/** Global variables and their values, exposed to all imported code. */
-	globalTbl: { [name: string]: any } = {};
-
-	registry: { [resolvedKey: string]: ModuleType } = {};
-
-	/** Pending imports. */
-	records: { [resolvedKey: string]: Record } = {};
-	latestRecord?: Record;
-
-	cwd: string;
-	baseURL?: string;
-
-	/** First file that called System.import.
-	  * Used for checking if an address is local to the current project. */
-	firstParent?: string;
-
-	/** Constructed browser plugin instances. */
-	plugins: { [name: string]: LoaderPlugin } = {};
+	records: { [cacheKey: string]: Record | undefined } = {};
+	registry: { [cacheKey: string]: ModuleObject | undefined } = {};
+	bundleMain?: Record;
 
 }

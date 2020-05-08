@@ -11,12 +11,13 @@
 		"outDir": "../dist/cjs",
 		"removeComments": false,
 		"sourceMap": true,
+		"strictBindCallApply": true,
 		"strictFunctionTypes": true,
+		"strictPropertyInitialization": true,
 		"strictNullChecks": true,
 		"target": "es5"
 	},
 	"files": [
-		"requirex-postcss-bundle.d.ts",
 		"index.ts"
 	]
 }

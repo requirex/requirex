@@ -1,70 +1,122 @@
-import { ModuleType } from './Module';
-import { Package } from './Package';
-import { globalEval, keys, assign } from './platform';
+import { assign, keys } from './platform/util';
+import { globalEval } from './platform/global';
+import { PluginStack, LoaderPlugin } from './Plugin';
+import { Importation, CustomPlugin, addPlugin } from './Status';
+import { ModuleObject } from './ModuleObject';
+import { Package } from './packages/Package';
 import { SourceMap } from './SourceMap';
-import { Loader } from './Loader';
 
-export type ModuleFormat = (
-	'js' |
-	'jsx' |
-	'amd' |
-	'cjs' |
-	'system' |
-	'ts' |
-	'tsx' |
-	'd.ts' |
-	'node' |
-	'document' |
-	'css' |
-	'cssraw'
-);
+/** Serialized form of a bundled package. */
+
+export interface BuiltSpec {
+
+	/** Package name. */
+	name: string;
+	version: string;
+	root: string;
+	main: string;
+
+	/** Browser import mappings from package.json. */
+	map: { [key: string]: string };
+
+	/** File names, formats and dependency names mapped to
+	  * their index in the bundle, or -1 if defined elsewhere. */
+	files: [string, string, { [importKey: string]: number }, any][];
+
+}
 
 export type ModuleFactory = (...args: any[]) => any;
 
-export interface DepRef {
-	/** True if dependency will be imported after resolving.
-	  * Existence checks can also load the file to save data transfers. */
-	isImport?: boolean;
-	/** Name of referenced but not yet fetched package. */
-	pendingPackageName?: string;
-	defaultExt?: string;
-	module?: ModuleType;
-	record?: Record;
-	package?: Package;
-	format?: string;
-	/** Custom loader plugin. */
-	plugin?: any;
-	/** Argument to a custom loader plugin. */
-	pluginArg?: string;
-	sourceKey?: string;
-	sourceCode?: string;
-	sourceOriginal?: string;
-	eval?: (record: Record) => void;
-}
+/** Every distinct imported URL has a unique record with all related metadata. */
 
 export class Record {
 
 	constructor(
-		public loader: Loader,
-		/** Resolved module name. */
 		public resolvedKey: string,
-		/** Unresolved name used in import. */
-		public importKey?: string,
-		public pkg?: Package
-	) { }
+		importation: Importation
+	) {
+		this.extension = importation.extension || '';
+		this.package = importation.package;
+		this.pluginStack = importation.pluginStack;
+		this.resolveStack = importation.pluginStack;
+		/* this.customPlugin = importation.customPlugin;
+		this.customArg = importation.customArg; */
+		this.sourceCode = importation.sourceCode;
+	}
 
-	addDep(key: string, ref?: DepRef) {
-		let num = this.depNumTbl[key];
+	addImport(importKey: string, importation?: Importation) {
+		let num = this.importNumTbl[importKey];
 
 		if(!num && num !== 0) {
-			num = this.depList.length;
-			this.depList[num] = key;
-			this.depNumTbl[key] = num;
+			num = this.importList.length;
+			this.importList[num] = importKey;
+			this.importNumTbl[importKey] = num;
 		}
 
-		if(ref) this.resolveDep(key, ref);
+		if(importation) this.resolveImport(importKey, importation);
 
 		return num;
+	}
+
+	resolveImport(importKey: string, importation: Importation) {
+		this.importTbl[importKey] = importation;
+	}
+
+	/** Turn all dependencies detected so far into devDependencies. */
+
+	stashImports() {
+		const importList = this.importList;
+
+		for(let key of importList) {
+			const dep = this.importTbl[key];
+
+			if(dep && !this.devImportTbl[key]) {
+				this.devImportTbl[key] = dep;
+				this.devImportList.push(key);
+			}
+
+			this.importNumTbl[key] = void 0;
+		}
+
+		importList.length = 0;
+	}
+
+	addGlobals(globals: { [name: string]: any }) {
+		assign(this.globals, globals);
+	}
+
+	/** Push a new loader plugin on this record's (immutable) plugin stack. */
+
+	addPlugin(plugin: LoaderPlugin) {
+		this.pluginStack = addPlugin(plugin, this.pluginStack);
+	}
+
+	/** Remove a loader plugin from this record's (immutable) plugin stack.
+	  * Copies references on top of the unwanted plugin, and references the
+	  * rest of the unmodified old stack.
+	  *
+	  * @param plugin Plugin instance to remove. */
+
+	removePlugin(plugin: LoaderPlugin) {
+		let src: PluginStack | undefined = this.pluginStack;
+
+		if(src.plugin == plugin) {
+			this.pluginStack = src.next!;
+			return;
+		}
+
+		let dst: PluginStack = { plugin: src.plugin };
+		this.pluginStack = dst;
+
+		while((src = src.next)) {
+			if(src.plugin == plugin) {
+				dst.next = src.next;
+				return;
+			}
+
+			dst.next = { plugin: src.plugin };
+			dst = dst.next;
+		}
 	}
 
 	addBundled(child: Record) {
@@ -73,37 +125,10 @@ export class Record {
 		return child;
 	}
 
-	addGlobals(globalTbl: { [name: string]: any }) {
-		assign(this.globalTbl, globalTbl);
-	}
-
-	resolveDep(key: string, ref: DepRef) {
-		this.depTbl[key] = ref;
-	}
-
-	clearDeps() {
-		for(let key of this.depList) {
-			this.depNumTbl[key] = void 0;
-		}
-
-		this.depList = [];
-	}
-
-	/** Turn all dependencies detected so far into devDependencies. */
-
-	setDepsDev() {
-		const depList = this.depList;
-		this.clearDeps();
-
-		for(let key of depList) {
-			const dep = this.depTbl[key];
-
-			if(dep && !this.devDepTbl[key]) {
-				this.devDepTbl[key] = dep;
-				this.devDepList.push(key);
-			}
-		}
-	}
+	/** Set arguments passed to wrapper function and bound in compiled code,
+	  * for example "define", "require" and globals.
+	  *
+	  * @param defs Additions to environment visible from compiled code. */
 
 	setArgs(...defs: { [name: string]: any }[]) {
 		const argTbl = this.argTbl;
@@ -148,30 +173,12 @@ export class Record {
 		return this.sourceMap;
 	}
 
-	/** Instantiate after translating all detected dependencies.
-	  * TODO: Make sure this does not get executed multiple times for the same record! */
-
-	init(loader: Loader, instantiate?: boolean) {
-		return Promise.all(this.deepDepList.map(
-			(record: Record) => loader.translate(record).then(() => {
-				record.extractSourceMap();
-				if(record.isDirty) loader.update(record);
-			})
-		)).then(
-			() => instantiate ? loader.instantiate(this) : this
-		)
-	}
-
 	getPragma() {
-		return '\n//# sourceURL=' + this.resolvedKey + (!this.sourceMap ? '' :
-			'!transpiled' +
-			'\n//# sourceMappingURL=' + this.sourceMap.encodeURL()
-		) + '\n'
-	}
-
-	withWrapper() {
-		const [prologue, epilogue] = this.getWrapper();
-		return prologue + this.sourceCode + epilogue;
+		// Use block comment to support CSS.
+		return '\n/*# sourceURL=' + this.resolvedKey + (!this.sourceMap ? '' :
+			'!transpiled*/' +
+			'\n/*# sourceMappingURL=' + this.sourceMap.encodeURL()
+		) + '*/\n'
 	}
 
 	getWrapper() {
@@ -181,7 +188,7 @@ export class Record {
 		];
 	}
 
-	wrap() {
+	wrap(): ModuleFactory {
 		const record = this;
 		const [prologue, epilogue] = this.getWrapper();
 
@@ -217,65 +224,90 @@ export class Record {
 		};
 	}
 
-	/** Autodetected or configured format of the module. */
-	format?: ModuleFormat;
+	/** Update source code. Called during translation to apply changes. */
+
+	update(code: string) {
+		this.sourceCode = code;
+		this.isDirty = true;
+	}
+
+	getFormat() {
+		return this.pluginStack.plugin.id;
+	}
+
+	argTbl: { [name: string]: any } = {};
+	argNames: string[] = [];
+	argValues: any[] = [];
 
 	parentBundle?: Record;
 	bundleChildren?: Record[];
 
-	/** Module object accessible from inside its code.
-	  * Must be set in the translate step to support circular dependencies. */
-	moduleInternal: ModuleType;
-	isInstantiated?: boolean;
-
-	loadError: any;
-
-	/** Names of imports detected in source code or listed in AMD defines. */
-	depList: string[] = [];
-	/** Indices (offset by 3) of AMD define callback params in depList.
-	  * Indices 0-2 reference require, exports, module. */
-	depNumList: number[] = [];
-	/** Map of import names to their load records or exported objects. */
-	depTbl: { [key: string]: DepRef | undefined } = {};
-	depNumTbl: { [key: string]: number | undefined } = {};
-	devDepTbl: { [key: string]: DepRef | undefined } = {};
-	devDepList: string[] = [];
-
-	globalTbl: { [name: string]: any } = {};
-
-	/** Table of recursive dependencies seen, to break circular chains. */
-	deepDepTbl: { [resolvedKey: string]: Record | undefined } = {};
-	/** Promises for translations of all recursive dependencies. */
-	deepDepList: Record[] = [];
-
-	/** Fetched and translated source code. */
-	sourceCode?: string;
-	/** Source code wrapped and compiled into an executable function. */
-	compiled: ModuleFactory;
-	factory: ModuleFactory;
+	compiled?: ModuleFactory;
+	factory?: ModuleFactory;
 
 	/** Address to show in sourceURL comment. */
 	sourceKey?: string;
 	sourceMap?: SourceMap;
 	sourceOriginal?: string;
 
-	/** True if source code has changed and cache should be updated. */
+	/** Current file extension, used as file format name if not defined by plugin stack top plugin. */
+	extension: string;
+
+	/** AMD loader plugin. */
+	// customPlugin?: CustomPlugin;
+
+	/** Argument for AMD loader plugin. */
+	// customArg?: string;
+
+	/** Resolves after any necessary source file has been fetched. */
+	fetched?: Promise<Record>;
+
+	/** Global variables exposed to instantiated code. */
+	globals: { [name: string]: any } = {};
+
+	/** Names of imports detected in source code or listed in AMD defines. */
+	importList: string[] = [];
+	/** Indices (offset by 3) of AMD define callback params in importList.
+	  * Indices 0-2 reference require, exports, module. */
+	importNumList: number[] = [];
+	/** Map of import names to their load records or exported objects. */
+	importTbl: { [key: string]: Importation | undefined } = {};
+	importNumTbl: { [key: string]: number | undefined } = {};
+	devImportTbl: { [key: string]: Importation | undefined } = {};
+	devImportList: string[] = [];
+
+	isAnalyzed?: true;
+	isTranslating?: true;
+	isInstantiated?: true;
+
+	/** True if code was loaded from already translated cache or bundle. */
+	isPreprocessed?: true;
+
+	/** True if code has changed in translation and cache not yet updated. */
 	isDirty?: boolean;
 
-	/** Optional custom evaluation function. For example HTML inline scripts
-	  * cannot use default eval() because they need a shared scope. */
-	eval?: (record: Record) => void;
+	/** Module object accessible from inside its code.
+	  * Must be set in the translate step to support circular dependencies. */
+	moduleInternal?: ModuleObject;
 
-	argTbl: { [name: string]: any } = {};
-	argNames: string[] = [];
-	argValues: any[] = [];
+	/** True if code seems to use ES6 syntax. */
+	hasES6?: boolean;
 
-	/** Index within bundle if applicable. */
+	/** True if code contains JSX elements. */
+	hasJSX?: boolean;
+
+	/** Index in bundle. Used during bundling. */
 	num?: number;
 
-	/** Promise resolved after discovery or rejected with a load error. */
-	discovered?: Promise<Record>;
-	/** Latest format used in translation, to avoid repeating it. */
-	translated?: ModuleFormat;
+	package: Package;
+
+	/** Loader plugins used during loading.
+	  * An immutable stack structure. */
+	pluginStack: PluginStack;
+
+	/** Plugins for resolving other files referenced in imports. */
+	resolveStack: PluginStack;
+
+	sourceCode?: string;
 
 }

@@ -1,4 +1,4 @@
-import { URL } from './URL';
+import { URL } from './platform/URL';
 import { encode64 } from '@lib/base64';
 
 /** See https://sourcemaps.info/spec.html */

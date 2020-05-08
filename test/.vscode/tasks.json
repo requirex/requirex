@@ -3,8 +3,16 @@
 	"tasks": [
 		{
 			"type": "shell",
-			"command": "npm run installed",
-			"label": "npm install"
+			"command": "npm run watch:test",
+			"label": "tsc --watch",
+			"isBackground": true,
+			"problemMatcher": [
+				"$tsc-watch"
+			],
+			"group": {
+				"kind": "build",
+				"isDefault": true
+			}
 		}
 	]
 }
