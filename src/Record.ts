@@ -143,11 +143,25 @@ export class Record {
 	}
 
 	getPragma() {
-		// Use block comment to support CSS.
-		return '\n/*# sourceURL=' + this.resolvedKey + (!this.sourceMap ? '' :
-			'!transpiled*/' +
-			'\n/*# sourceMappingURL=' + this.sourceMap.encodeURL()
-		) + '*/\n'
+		let start = '//';
+		let end = '\n';
+
+		if(this.getFormat() == 'css') {
+			// Use block comment to support CSS.
+			start = '/*';
+			end = '*/\n';
+		}
+
+		let pragma = '\n' + start + '# sourceURL=' + this.resolvedKey;
+
+		if(this.sourceMap) {
+			pragma += (
+				'!transpiled' + end +
+				start + '# sourceMappingURL=' + this.sourceMap.encodeURL()
+			);
+		}
+
+		return pragma + end;
 	}
 
 	getWrapper() {
