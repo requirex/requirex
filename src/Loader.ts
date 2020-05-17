@@ -257,20 +257,23 @@ export class Loader {
 		return importation;
 	}
 
-	/* eval(code: string, resolvedKey?: string, importKey?: string) {
-		const inline: DepRef = {
-			format: 'js',
-			sourceCode: code,
-			package: this.package
-		};
+	eval(code: string, resolvedKey?: string, importKey = '[eval]') {
+		const status = this.newStatus();
+		const importation = this.newImportation(importKey, void 0, status);
 
-		importKey = importKey || '[eval]';
-		resolvedKey = resolvedKey || this.baseURL + importKey;
+		importation.sourceCode = code;
 
-		return this.discoverRecursive(resolvedKey, importKey, inline, true).then(
-			(record?: Record) => record && record.init(this, true)
-		)
-	} */
+		const record = new Record(
+			resolvedKey || this.config.baseURL + importKey,
+			importation
+		);
+
+		record.addPlugin(this.getDefaultPlugin());
+
+		return this.analyzeAll(record, status, importKey).then(
+			(record) => this.translateInstantiate(record, status, importKey!)
+		);
+	}
 
 	/** Synchronous import, like Node.js require(). */
 

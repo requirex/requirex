@@ -8,6 +8,10 @@ export class RequireX {
 		if(config) this.config(config);
 	}
 
+	eval(code: string) {
+		return this.internal.eval(code);
+	}
+
 	config(config: LoaderConfig) {
 		this.internal.setConfig(config);
 	}
