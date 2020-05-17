@@ -328,6 +328,8 @@ export class DocumentPlugin implements LoaderPlugin {
 			record.sourceCode = changeSet.patchCode(original);
 			record.sourceOriginal = original;
 
+			record.addPlugin(this.loader.getDefaultPlugin(), true);
+
 			return record;
 		})
 	}

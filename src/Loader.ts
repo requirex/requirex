@@ -37,6 +37,10 @@ export interface LoaderConfig {
 	/** Currect working directory. */
 	cwd?: string;
 
+	defaultFormat?: string | PluginSpec;
+
+	formats?: { [extension: string]: string | PluginSpec };
+
 	/** Global variables exposed to instantiated code. */
 	globals?: { [name: string]: any };
 
@@ -116,6 +120,32 @@ export class Loader {
 			};
 		}
 
+		const formats = config.formats || {};
+
+		for(let extension of keys(formats)) {
+			const plugin = formats[extension];
+
+			if(typeof plugin != 'string') {
+				this.extensionTbl[extension] = this.initPlugin(plugin);
+			}
+		}
+
+		for(let extension of keys(formats)) {
+			const name = formats[extension];
+
+			if(typeof name == 'string') {
+				this.extensionTbl[extension] = this.extensionTbl[name];
+			}
+		}
+
+		const defaultFormat = config.defaultFormat;
+
+		if(typeof defaultFormat == 'string') {
+			this.defaultPlugin = this.extensionTbl[defaultFormat];
+		} else if(defaultFormat) {
+			this.defaultPlugin = this.initPlugin(defaultFormat);
+		}
+
 		// Initialize records that have their own custom plugins.
 		const specials = config.specials || {};
 
@@ -174,6 +204,25 @@ export class Loader {
 		return pluginInstance;
 	}
 
+	getDefaultPlugin(extension?: string) {
+		return extension ? this.extensionTbl[extension] : this.defaultPlugin;
+	}
+
+	getExtension(resolvedKey: string) {
+		let plugin: LoaderPlugin | undefined;
+		let pos = resolvedKey.lastIndexOf('/') + 1;
+		let ext: string | undefined;
+
+		// Check for recognized file extensions starting from
+		// the most specific, like .d.ts followed by .ts.
+		while((pos = resolvedKey.indexOf('.', pos) + 1) && !plugin) {
+			ext = resolvedKey.substr(pos).toLowerCase();
+			plugin = this.getDefaultPlugin(ext);
+		}
+
+		return ext;
+	}
+
 	/** Set up metadata for coordinating a recursive import.
 	  *
 	  * @return Status object used during the import process. */
@@ -193,15 +242,15 @@ export class Loader {
 		importKey: string,
 		baseKey?: string,
 		status?: Status,
-		resolveStack?: PluginStack
+		parent?: Record
 	) {
 		const importation: Importation = {
 			baseKey: baseKey || this.config.baseURL,
 			extensionList: [],
 			importKey,
 			package: this.package,
+			parent,
 			pluginStack: this.pluginStack,
-			resolveStack: resolveStack || this.pluginStack,
 			status: status || this.defaultStatus
 		};
 
@@ -333,14 +382,13 @@ export class Loader {
 				importKey,
 				baseKey,
 				status,
-				parent && parent.resolveStack
+				parent
 			);
 		}
 
 		if(parent) {
 			// Cache result for parent record and unresolved import name.
 			parent.importTbl[importKey] = importation;
-			importation.parent = parent;
 		} else {
 			// If parent record is unknown, its resolve hook cannot define
 			// default file extensions, so handle that here.
@@ -394,13 +442,6 @@ export class Loader {
 		if(!record.isAnalyzed) record.extractSourceMap();
 
 		return this.analyze(record, importKey).then(() => {
-			if(!record.isTranslating) {
-				// Plugins used for resolving imports are determined after
-				// analyzing format of the importing file, before the format
-				// changes in the translation step.
-				record.resolveStack = record.pluginStack;
-			}
-
 			return Promise.all(record.importList.map((importKey) =>
 				this.resolveFetchAnalyzeAll(importKey, record.resolvedKey, status, record)
 			)).then(() => record)
@@ -613,13 +654,21 @@ export class Loader {
 		for(let pkgSpec of specList) {
 			const pkg = packageList[specNum++];
 
-			for(let [key, format, deps, compiled] of pkgSpec.files) {
+			for(let [key, plugins, deps, compiled] of pkgSpec.files) {
 				const resolvedKey = !pkg.rootKey ? key : URL.resolve(pkg.rootKey + '/', key);
 				let record = this.records[resolvedKey];
 
 				if(!record) {
-					record = new Record(resolvedKey, this.newImportation(resolvedKey));
-					record.addPlugin(this.pluginTbl[format]);
+					const importation = this.newImportation(resolvedKey);
+					importation.extension = this.getExtension(resolvedKey);
+
+					record = new Record(resolvedKey, importation);
+
+					for(let num = plugins.length; num--;) {
+						const plugin = this.pluginTbl[plugins[num]];
+						record.addPlugin(plugin);
+					}
+
 					record.addGlobals(this.config.globals || {});
 					record.compiled = compiled;
 					record.fetched = Promise.resolve(record);
@@ -672,7 +721,9 @@ export class Loader {
 	/** Current configuration options. */
 	config: LoaderConfig = {};
 
-	pluginTbl: { [name: string]: LoaderPlugin } = {};
+	pluginTbl: { [name: string]: LoaderPlugin | undefined } = {};
+	extensionTbl: { [name: string]: LoaderPlugin | undefined } = {};
+	defaultPlugin?: LoaderPlugin;
 
 	/** Root package for modules without a path, such as the Node.js API. */
 	package = new Package('_', '');

@@ -9,7 +9,7 @@ import { fetchContainingPackage } from '../packages/fetchContainingPackage';
 import { fetchPackage } from '../packages/fetchPackage';
 import { Importation, addPlugin } from '../Status';
 import { BuiltSpec } from '../Record';
-import { LoaderPlugin, NextResolve, pluginFactory, PluginSpec } from '../Plugin';
+import { LoaderPlugin, pluginFactory } from '../Plugin';
 import { Loader } from '../Loader';
 
 interface ResolveState {
@@ -104,7 +104,7 @@ function ifExistsList(loader: Loader, list: string[], pos: number): Promise<stri
 }
 
 function getFileLocations(
-	extensions: { [name: string]: LoaderPlugin | undefined },
+	loader: Loader,
 	key: string,
 	importation: Importation
 ) {
@@ -112,7 +112,7 @@ function getFileLocations(
 	const extensionList = importation.extensionList;
 	let ext = key.substr(key.lastIndexOf('.') + 1);
 
-	if((ext && extensions[ext]) || !extensionList) {
+	if((ext && loader.getDefaultPlugin(ext)) || !extensionList) {
 		locations.push(key);
 		return locations;
 	}
@@ -139,8 +139,6 @@ export interface ResolveConfig {
 	/** Suggested dependency versions, format is like in package.json. */
 	dependencies?: { [name: string]: string };
 
-	formats?: PluginSpec[];
-
 	/** Ordered list of package.json field names for the main script. */
 	mainFields?: string[];
 
@@ -154,14 +152,6 @@ export class ResolvePlugin implements LoaderPlugin {
 		config = config || {};
 
 		this.manager = config.manager || new PackageManager(config);
-
-		for(let format of config.formats || []) {
-			const plugin = loader.initPlugin(format)
-
-			for(let name of keys(plugin.extensions || {})) {
-				this.extensions[name] = plugin;
-			}
-		}
 
 		const dependencies = config.dependencies || {};
 
@@ -184,7 +174,7 @@ export class ResolvePlugin implements LoaderPlugin {
 
 		if(inRegistry(loader, key)) return key;
 
-		const locations = getFileLocations(this.extensions, key, importation);
+		const locations = getFileLocations(loader, key, importation);
 
 		// TODO: If result is not the first key, configure mappings.
 
@@ -227,16 +217,9 @@ export class ResolvePlugin implements LoaderPlugin {
 	}
 
 	setPlugin(resolvedKey: string, importation: Importation) {
-		let plugin: LoaderPlugin | undefined;
-		let pos = resolvedKey.lastIndexOf('/') + 1;
-		let ext: string | undefined;
-
-		// Check for recognized file extensions starting from
-		// the most specific, like .d.ts followed by .ts.
-		while((pos = resolvedKey.indexOf('.', pos) + 1) && !plugin) {
-			ext = resolvedKey.substr(pos).toLowerCase();
-			plugin = this.extensions[ext];
-		}
+		const loader = this.loader;
+		const ext = loader.getExtension(resolvedKey);
+		const plugin = loader.getDefaultPlugin(ext);
 
 		if(plugin) {
 			importation.extension = ext;
@@ -279,7 +262,7 @@ export class ResolvePlugin implements LoaderPlugin {
 		return this.setPlugin(this.checkFile(state.resolvedKey, importation, true), importation);
 	}
 
-	resolve(importation: Importation, next: NextResolve): Zalgo<string> {
+	resolve(importation: Importation): Zalgo<string> {
 		const { loader, manager } = this;
 		const baseKey = importation.baseKey || '';
 		let resolvedKey: string;
@@ -355,8 +338,6 @@ export class ResolvePlugin implements LoaderPlugin {
 
 		return packageList;
 	}
-
-	extensions: { [name: string]: LoaderPlugin | undefined } = {};
 
 	lockReady: Promise<void> = emptyPromise;
 

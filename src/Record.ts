@@ -1,7 +1,7 @@
 import { assign, keys } from './platform/util';
 import { globalEval } from './platform/global';
 import { PluginStack, LoaderPlugin } from './Plugin';
-import { Importation, CustomPlugin, addPlugin } from './Status';
+import { Importation, addPlugin } from './Status';
 import { ModuleObject } from './ModuleObject';
 import { Package } from './packages/Package';
 import { SourceMap } from './SourceMap';
@@ -38,9 +38,6 @@ export class Record {
 		this.extension = importation.extension || '';
 		this.package = importation.package;
 		this.pluginStack = importation.pluginStack;
-		this.resolveStack = importation.pluginStack;
-		/* this.customPlugin = importation.customPlugin;
-		this.customArg = importation.customArg; */
 		this.sourceCode = importation.sourceCode;
 	}
 
@@ -87,36 +84,8 @@ export class Record {
 
 	/** Push a new loader plugin on this record's (immutable) plugin stack. */
 
-	addPlugin(plugin: LoaderPlugin) {
-		this.pluginStack = addPlugin(plugin, this.pluginStack);
-	}
-
-	/** Remove a loader plugin from this record's (immutable) plugin stack.
-	  * Copies references on top of the unwanted plugin, and references the
-	  * rest of the unmodified old stack.
-	  *
-	  * @param plugin Plugin instance to remove. */
-
-	removePlugin(plugin: LoaderPlugin) {
-		let src: PluginStack | undefined = this.pluginStack;
-
-		if(src.plugin == plugin) {
-			this.pluginStack = src.next!;
-			return;
-		}
-
-		let dst: PluginStack = { plugin: src.plugin };
-		this.pluginStack = dst;
-
-		while((src = src.next)) {
-			if(src.plugin == plugin) {
-				dst.next = src.next;
-				return;
-			}
-
-			dst.next = { plugin: src.plugin };
-			dst = dst.next;
-		}
+	addPlugin(plugin?: LoaderPlugin, raise?: boolean) {
+		if(plugin) this.pluginStack = addPlugin(plugin, this.pluginStack, raise);
 	}
 
 	addBundled(child: Record) {
@@ -235,6 +204,19 @@ export class Record {
 		return this.pluginStack.plugin.id;
 	}
 
+	getPlugins(baseStack: PluginStack) {
+		const result: string[] = [];
+		let frame: PluginStack | undefined = this.pluginStack;
+
+		while(frame && frame != baseStack) {
+			const name = frame.plugin.id;
+			if(name) result.push(name);
+			frame = frame.next;
+		}
+
+		return result;
+	}
+
 	argTbl: { [name: string]: any } = {};
 	argNames: string[] = [];
 	argValues: any[] = [];
@@ -252,12 +234,6 @@ export class Record {
 
 	/** Current file extension, used as file format name if not defined by plugin stack top plugin. */
 	extension: string;
-
-	/** AMD loader plugin. */
-	// customPlugin?: CustomPlugin;
-
-	/** Argument for AMD loader plugin. */
-	// customArg?: string;
 
 	/** Resolves after any necessary source file has been fetched. */
 	fetched?: Promise<Record>;
@@ -304,9 +280,6 @@ export class Record {
 	/** Loader plugins used during loading.
 	  * An immutable stack structure. */
 	pluginStack: PluginStack;
-
-	/** Plugins for resolving other files referenced in imports. */
-	resolveStack: PluginStack;
 
 	sourceCode?: string;
 

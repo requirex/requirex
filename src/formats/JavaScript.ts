@@ -70,10 +70,6 @@ class JavaScriptPlugin implements LoaderPlugin {
 		for(let key of keys(formatConfig || {})) {
 			const plugin = loader.initPlugin(formatConfig![key]!);
 			formats[key] = plugin;
-
-			for(let name of keys(plugin.extensions || {})) {
-				this.extensions[name] = plugin;
-			}
 		}
 
 		const { amd, system, cjs } = formats;
@@ -115,7 +111,7 @@ class JavaScriptPlugin implements LoaderPlugin {
 		const { keywordTbl, variableTbl } = this;
 		const ignoreTbl: { [token: string]: true | undefined } = {};
 		let plugin: LoaderPlugin | undefined;
-		let pluginFallback = this.extensions[record.extension];
+		let pluginFallback: LoaderPlugin = record.extension == 'js' ? this : this.formats.es6 || this;
 
 		function isTrue(condition: string) {
 			return (0, eval)(
@@ -146,7 +142,7 @@ class JavaScriptPlugin implements LoaderPlugin {
 		function onVariable(token: string, chunkAfter: string, isRedefined: boolean) {
 			const spec = variableTbl[token];
 
-			if(spec[1].test(chunkAfter)) {
+			if(spec[0] && spec[1].test(chunkAfter)) {
 				if(isRedefined) {
 					pluginFallback = spec[0];
 				} else {
@@ -199,6 +195,13 @@ class JavaScriptPlugin implements LoaderPlugin {
 		record.update(changeSet.patchCode(code));
 	}
 
+	translate(record: Record) {
+		if(!record.moduleInternal) record.moduleInternal = {
+			exports: {},
+			id: record.resolvedKey
+		};
+	}
+
 	/** Run code with no module format, for example a requirex bundle. */
 
 	instantiate(record: Record) {
@@ -209,22 +212,12 @@ class JavaScriptPlugin implements LoaderPlugin {
 			System: this.loader.external
 		});
 
-		if(!compiled /* && !record.eval */) {
-			// try {
-			// Compile module into a function under global scope.
+		if(!compiled) {
 			compiled = record.wrap();
-			// } catch(err) {
-			// record.loadError = err;
-			// throw err;
-			// }
 		}
 
 		// Call imported module.
-		// if(record.eval) {
-		// record.eval(record);
-		// } else {
 		compiled.apply(null, record.argValues);
-		// }
 	}
 
 	wrap(record: Record) {
@@ -244,10 +237,6 @@ class JavaScriptPlugin implements LoaderPlugin {
 		export: Keyword.ES6_IMPORT,
 		'>': Keyword.JSX
 	});
-
-	extensions: { [name: string]: LoaderPlugin | undefined } = {
-		js: this
-	};
 
 	id?: string;
 

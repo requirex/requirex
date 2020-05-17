@@ -189,10 +189,6 @@ export class CSSPlugin implements LoaderPlugin {
 
 	config: CSSConfig;
 
-	extensions: { [name: string]: LoaderPlugin | undefined } = {
-		css: this
-	};
-
 	worker: CSSWorker;
 
 	id?: string;

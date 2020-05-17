@@ -83,8 +83,6 @@ export interface LoaderPlugin {
 	wrap?: NextWrap<NextWrap>;
 	cache?: NextCache<NextCache>;
 
-	extensions?: { [name: string]: any | undefined };
-
 	id?: string;
 
 }
@@ -119,7 +117,8 @@ function nextPlugin(
 /** Call the resolveSync method of the next loader plugin. */
 
 export const nextResolveSync: NextResolveSync = (importation, prevPlugin) => {
-	const plugin = nextPlugin(importation.resolveStack, prevPlugin, (plugin) => plugin.resolveSync)!;
+	const pluginStack = (importation.parent || importation).pluginStack;
+	const plugin = nextPlugin(pluginStack, prevPlugin, (plugin) => plugin.resolveSync)!;
 
 	return plugin.resolveSync!(importation, nextResolveSync);
 }
@@ -127,7 +126,11 @@ export const nextResolveSync: NextResolveSync = (importation, prevPlugin) => {
 /** Call the resolve method of the next loader plugin. */
 
 export const nextResolve: NextResolve = (importation, prevPlugin) => {
-	const plugin = nextPlugin(importation.resolveStack, prevPlugin, (plugin) => plugin.resolve)!;
+	const plugin = nextPlugin(
+		(importation.parent || importation).pluginStack,
+		prevPlugin,
+		(plugin) => plugin.resolve
+	)!;
 
 	return plugin.resolve!(importation, nextResolve);
 }

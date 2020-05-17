@@ -4,11 +4,45 @@ import { Package } from './packages/Package';
 import { Record } from './Record';
 import { LoaderPlugin } from './Plugin';
 
-export function addPlugin(plugin: LoaderPlugin, stack: PluginStack) {
-	let frame: PluginStack | undefined = stack;
+/** Remove a loader plugin from this record's (immutable) plugin stack.
+  * Copies references on top of the unwanted plugin, and references the
+  * rest of the unmodified old stack.
+  *
+  * @param plugin Plugin instance to remove. */
+
+export function removePlugin(plugin: LoaderPlugin, stack?: PluginStack) {
+	if(!stack) return stack;
+
+	if(stack.plugin == plugin) {
+		return stack.next;
+	}
+
+	const result: PluginStack = { plugin: stack.plugin };
+	let dst = result;
+
+	while((stack = stack.next)) {
+		if(stack.plugin == plugin) {
+			dst.next = stack.next;
+			return result;
+		}
+
+		dst.next = { plugin: stack.plugin };
+		dst = dst.next;
+	}
+
+	return result;
+}
+
+export function addPlugin(plugin: LoaderPlugin, stack?: PluginStack, raise?: boolean): PluginStack {
+	let frame = stack;
 
 	while(frame) {
-		if(frame.plugin == plugin) return stack;
+		if(frame.plugin == plugin) {
+			if(raise) {
+				stack = removePlugin(plugin, stack);
+				break;
+			} else return stack!;
+		}
 		frame = frame.next;
 	}
 
@@ -78,7 +112,6 @@ export interface Importation {
 	module?: ModuleObject;
 	package: Package;
 	pluginStack: PluginStack;
-	resolveStack: PluginStack;
 	record?: Record;
 	parent?: Record;
 	result?: Promise<Record | undefined>;

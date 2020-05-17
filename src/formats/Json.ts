@@ -11,10 +11,6 @@ class JsonPlugin implements LoaderPlugin {
 		return record.sourceCode || 'null';
 	}
 
-	extensions: { [name: string]: LoaderPlugin | undefined } = {
-		json: this
-	};
-
 	id?: string;
 
 }

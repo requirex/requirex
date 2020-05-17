@@ -13,11 +13,7 @@ const enum ParserState {
 
 class HTMLPlugin implements LoaderPlugin {
 
-	constructor(private loader: Loader, config?: { js?: PluginSpec }) {
-		if(config && config.js) {
-			this.js = loader.initPlugin(config.js);
-		}
-	}
+	constructor(private loader: Loader) { }
 
 	analyze(record: Record) {
 		let code = '';
@@ -133,11 +129,8 @@ class HTMLPlugin implements LoaderPlugin {
 
 		// record.addImport('./#.js', importation);
 
-		if(this.js) {
-			record.sourceCode = code;
-			record.removePlugin(this);
-			record.addPlugin(this.js);
-		}
+		record.sourceCode = code;
+		record.addPlugin(this.loader.getDefaultPlugin(), true);
 	}
 
 	instantiate(record: Record) {
@@ -155,7 +148,6 @@ class HTMLPlugin implements LoaderPlugin {
 	};
 
 	id?: string;
-	js?: LoaderPlugin;
 
 }
 

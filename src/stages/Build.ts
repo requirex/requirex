@@ -86,7 +86,7 @@ export class BuildPlugin implements LoaderPlugin {
 					return '\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
 						// TODO: registryKey
 						str(URL.relative(pkg.rootKey + '/', record.resolvedKey)),
-						str(record.getFormat()),
+						str(record.getPlugins(this.loader.pluginStack)),
 						'{' + deps.join(', ') + '}',
 						code
 					].join(', ');

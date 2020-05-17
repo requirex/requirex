@@ -7,6 +7,8 @@ import { keys, makeTable, Zalgo } from '../platform/util';
 import { LoaderPlugin, pluginFactory, NextResolve } from '../Plugin';
 import { Loader } from '../Loader';
 
+const tsExtensions = makeTable('ts tsx jsx d.ts');
+
 class Host implements Lib.LanguageServiceHost {
 
 	constructor(
@@ -194,18 +196,18 @@ export class TypeScriptPlugin implements LoaderPlugin {
 	translate(record: Record) {
 		if(record.extension == 'd.ts') return;
 
-		const key = transformKey(record, this.extensions);
+		const key = transformKey(record, tsExtensions);
 		let translated: Promise<{ code?: string, map?: string }>;
 
-		if(this.extensions[record.extension]) {
+		if(tsExtensions[record.extension]) {
 			// Get source code from previously unseen records.
 			for(let otherKey of keys(this.loader.records)) {
 				const otherRecord = this.loader.records[otherKey]!;
 
-				if(!this.seenTbl[otherKey] && (this.extensions[otherRecord.extension] /* || otherRecord.hasES6 || otherRecord.hasJSX */)) {
+				if(!this.seenTbl[otherKey] && (tsExtensions[otherRecord.extension] /* || otherRecord.hasES6 || otherRecord.hasJSX */)) {
 					this.seenTbl[otherKey] = 1;
 					this.sourceList.push({
-						key: transformKey(otherRecord, this.extensions),
+						key: transformKey(otherRecord, tsExtensions),
 						code: otherRecord.sourceCode || ''
 					});
 				}
@@ -238,7 +240,7 @@ export class TypeScriptPlugin implements LoaderPlugin {
 			// Actual run-time dependencies will be detected in transpiled output.
 			record.stashImports();
 
-			record.removePlugin(this);
+			record.addPlugin(this.loader.getDefaultPlugin(), true);
 		});
 	}
 
@@ -248,7 +250,6 @@ export class TypeScriptPlugin implements LoaderPlugin {
 	seenTbl: { [resolvedKey: string]: number } = {};
 	sourceList: { key: string, code: string }[] = [];
 
-	extensions = makeTable('ts tsx jsx d.ts');
 	worker: TypeScriptWorker;
 
 	id?: string;

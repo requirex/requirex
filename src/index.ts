@@ -49,7 +49,23 @@ const js = JavaScript({
 	}
 });
 
+const html = HTML()
+
 System.config({
+	defaultFormat: js,
+	formats: {
+		js,
+		jsx: js,
+		ts: js,
+		tsx: js,
+		'd.ts': js,
+		css: CSS({
+			postCSS: true
+		}),
+		json: Json(),
+		htm: html,
+		html
+	},
 	globals: {
 		process: features.isNode ? globalEnv.process : {
 			argv: ['/bin/node'],
@@ -67,14 +83,6 @@ System.config({
 				'typescript': '^3',
 				'requirex-postcss-bundle': '^0.3.0'
 			},
-			formats: [
-				js,
-				CSS({
-					postCSS: true
-				}),
-				Json(),
-				HTML({ js })
-			],
 			mainFields: (features.isNode ? ['main', 'module'] :
 				['unpkg', 'browser', 'main', 'module']
 			)
@@ -82,7 +90,7 @@ System.config({
 		Build()
 	],
 	specials: {
-		Document: [Document({ stage: 'auto' }), js]
+		Document: [Document({ stage: 'auto' })]
 	},
 	registry: {
 		'@empty': {},

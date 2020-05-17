@@ -24,7 +24,7 @@ export interface CacheMeta {
 	/** HTTP response headers, for future use. */
 	headers: FetchHeaders;
 	/** JavaScript module format reported by later discovery step. */
-	format?: string;
+	plugins?: string[];
 	/** Dependencies reported by later discovery step. */
 	deps?: string[];
 }
@@ -381,13 +381,19 @@ export class CachePlugin implements LoaderPlugin {
 			// After remote fetch, compare cached and new version.
 			// If they are identical, re-use old metadata and transpiled code.
 
-			if(storage && meta && code == this.textTbl[key]) {
+			if(storage && meta && meta.plugins && code == this.textTbl[key]) {
 				return Promise.all([
 					storage.read(StoreKind.TRANSPILED, key).catch(() => { }),
 					storage.read(StoreKind.SOURCEMAP, key).catch(() => { })
 				]).then(([trans, map]) => {
 					if(trans) {
-						if(meta!.format) record.addPlugin(this.loader.pluginTbl[meta!.format]);
+						const plugins = meta.plugins!;
+
+						for(let num = plugins.length; num--;) {
+							const plugin = this.loader.pluginTbl[plugins[num]];
+							record.addPlugin(plugin);
+						}
+
 						record.importList = meta!.deps || [];
 						record.sourceCode = trans;
 						record.isPreprocessed = true;
@@ -411,7 +417,7 @@ export class CachePlugin implements LoaderPlugin {
 			storage.read(StoreKind.META, record.resolvedKey).then((data: string) => {
 				const meta: CacheMeta = JSON.parse(data);
 
-				meta.format = record.getFormat();
+				meta.plugins = record.getPlugins(this.loader.pluginStack);
 				meta.deps = record.importList;
 
 				// TODO: Maybe call a hook in the format plugin so it can store
