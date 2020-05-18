@@ -162,6 +162,7 @@ export class CachePlugin implements LoaderPlugin {
 		if(!storage) return Promise.resolve(res);
 
 		const finalKey = (res && decodeURI(res.url)) || resolvedKey;
+		let old: string;
 
 		const snapshotReady = this.metaTbl[resolvedKey] || this.metaTbl[finalKey] ? Promise.resolve(res) : (
 			storage.read(StoreKind.META, resolvedKey).catch(
@@ -174,6 +175,7 @@ export class CachePlugin implements LoaderPlugin {
 				return storage.read(StoreKind.SOURCE, finalKey);
 			}).then((text) => {
 				this.textTbl[finalKey] = text;
+				old = text;
 				return res;
 			}).catch(() => res)
 		);
@@ -199,13 +201,14 @@ export class CachePlugin implements LoaderPlugin {
 
 			const data = JSON.stringify(meta);
 
-			// Store metadata using both original and possibly redirected URL.
-			storage.write(StoreKind.META, resolvedKey, data);
-			storage.write(StoreKind.META, meta.url, data);
-
 			if(res && !isHead) {
 				res.text().then((text: string) => {
-					storage.write(StoreKind.SOURCE, meta!.url, text);
+					if(!old || text != old) {
+						// Store metadata using both original and possibly redirected URL.
+						storage.write(StoreKind.META, resolvedKey, data);
+						storage.write(StoreKind.META, meta.url, data);
+						storage.write(StoreKind.SOURCE, meta!.url, text);
+					}
 				});
 			}
 		});
