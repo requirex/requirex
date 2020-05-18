@@ -1,4 +1,5 @@
-import { keys, slice } from '../platform/util';
+import { encode64 } from '@lib/base64';
+import { keys, slice, stringify } from '../platform/util';
 import { PluginClass, LoaderPlugin } from '../Plugin';
 import { Channel, MessageKind } from './Channel';
 
@@ -67,7 +68,9 @@ export class WorkerManager {
 		if(loaderAddress) return new WorkerManager(loaderAddress);
 	}
 
-	private constructor(public loaderAddress: string) { }
+	private constructor(loaderAddress: string) {
+		this.workerCode = 'data:application/javascript;base64,' + encode64('importScripts(' + stringify(loaderAddress) + ')');
+	}
 
 	/** Create a new Web Worker.
 	  * 
@@ -77,7 +80,7 @@ export class WorkerManager {
 		const group = this.pools[affinity];
 
 		group.workerStack.push(new Channel(
-			new Worker(this.loaderAddress),
+			new Worker(this.workerCode),
 			(data: any) => {
 				const plugin = this.routeTbl[data.route];
 				return plugin && plugin[data.method].apply(plugin, data.args);
@@ -257,5 +260,7 @@ export class WorkerManager {
 			taskStack: []
 		}
 	});
+
+	private workerCode: string;
 
 }
