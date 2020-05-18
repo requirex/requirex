@@ -66,5 +66,6 @@ export const features = {
 		isNode &&
 		typeof process.platform == 'string' &&
 		process.platform.substr(0, 3) == 'win'
-	)
+	),
+	origin: ''
 };

@@ -69,7 +69,8 @@ export class WorkerManager {
 	}
 
 	private constructor(loaderAddress: string) {
-		this.workerCode = 'data:application/javascript;base64,' + encode64('importScripts(' + stringify(loaderAddress) + ')');
+		const address = stringify(loaderAddress);
+		this.workerCode = 'data:application/javascript;base64,' + encode64('importScripts(' + address + ');System.config({baseURL:' + address + '})');
 	}
 
 	/** Create a new Web Worker.

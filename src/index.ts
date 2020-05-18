@@ -2,7 +2,7 @@ import { URL } from './platform/URL';
 import { globalEnv } from './platform/global';
 import { features } from './platform/features';
 import { fetch, FetchResponse } from './platform/fetch';
-import { keys, assign } from './platform/util';
+import { keys, assign, stripSlash } from './platform/util';
 import { WorkerCallee } from './worker/WorkerCallee';
 import { RequireX } from './RequireX';
 import { Cache } from './stages/Cache';
@@ -53,7 +53,15 @@ const js = JavaScript({
 const html = HTML()
 const txt = Txt();
 
+const location = (typeof self == 'object' && globalEnv.location == self.location && self.location) || void 0;
+const baseURL = location && location.href;
+let cwd: string | undefined;
+
+if(features.isNode) cwd = stripSlash(process.cwd());
+
 System.config({
+	baseURL,
+	cwd,
 	defaultFormat: js,
 	formats: {
 		js,
@@ -96,7 +104,7 @@ System.config({
 		Build()
 	],
 	specials: {
-		Document: [Document({ stage: 'auto' })]
+		Document: [Document({ href: baseURL, stage: 'auto' })]
 	},
 	registry: {
 		'@empty': {},

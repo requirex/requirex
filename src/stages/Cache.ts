@@ -5,7 +5,6 @@ import { skipSlashes } from '../platform/URL';
 import { stringify } from '../platform/util';
 import { SourceMap } from '../SourceMap';
 import { features } from '../platform/features';
-import { origin } from '../platform/browser';
 import { LoaderPlugin, NextFetchRecord, pluginFactory } from '../Plugin';
 import { Loader } from '../Loader';
 
@@ -292,7 +291,7 @@ export class CachePlugin implements LoaderPlugin {
 	}
 
 	isLocal(resolvedKey: string) {
-		const local = origin || this.loader.config.libraryBaseKey;
+		const local = this.loader.config.baseURL || this.loader.config.libraryBaseKey;
 
 		if(!this.storage || !local) return false;
 
@@ -301,7 +300,7 @@ export class CachePlugin implements LoaderPlugin {
 
 		return (
 			posOrigin > 0 &&
-			resolvedKey.substr(0, posOrigin) == (local + '/').substr(0, posOrigin) && (
+			resolvedKey.substr(0, posOrigin) == local.substr(0, posOrigin) && (
 				posModules < 0 /* ||
 				this.loader.modulesBustTbl[resolvedKey.substr(0, posModules + nodeModules.length)] */
 			)

@@ -1,9 +1,8 @@
 import { FetchResponse, FetchOptions } from './platform/fetch';
 import { URL } from './platform/URL';
 import { features } from './platform/features';
-import { location, origin } from './platform/browser';
 import { getCallerKey, nodeRequire } from './platform/node';
-import { Zalgo, assign, keys, getDir, stripSlash, appendSlash, emptyPromise } from './platform/util';
+import { Zalgo, assign, keys, getDir, appendSlash, emptyPromise } from './platform/util';
 import { WorkerManager } from './worker/WorkerManager';
 import { WorkerCallee } from './worker/WorkerCallee';
 import { RequireX } from './RequireX';
@@ -66,18 +65,6 @@ export interface LoaderConfig {
 export class Loader {
 
 	constructor(public external: RequireX) {
-		/** Currect working directory. */
-		let cwd: string;
-		let baseURL: string | undefined;
-
-		if(origin && location) {
-			cwd = getDir(location.pathname) || '/';
-			baseURL = origin + appendSlash(cwd);
-		} else {
-			cwd = (features.isNode && stripSlash(process.cwd())) || '/';
-		}
-
-		this.config = { baseURL, cwd };
 		this.pluginStack = { plugin: new BasePlugin(this) };
 
 		const manager = features.hasWorker && WorkerManager.createManager();
@@ -94,6 +81,18 @@ export class Loader {
 		// Copy contents of new configuration with recursion depth 1
 		// to also keep current plugins, globals and registry.
 		assign(this.config, config, 1);
+
+		if(config.baseURL) {
+			const url = URL.parse(config.baseURL);
+			const cwd = getDir(url.pathname || '') || '/';
+
+			if(!config.cwd) {
+				this.config.cwd = cwd;
+			}
+
+			features.origin = url.origin;
+			this.config.baseURL = url.origin + appendSlash(cwd);
+		}
 
 		// Set up modules with predefined exports objects.
 		const registry = config.registry || {};
@@ -722,7 +721,7 @@ export class Loader {
 	pluginStack: PluginStack;
 
 	/** Current configuration options. */
-	config: LoaderConfig = {};
+	config: LoaderConfig = { cwd: '/' };
 
 	pluginTbl: { [name: string]: LoaderPlugin | undefined } = {};
 	extensionTbl: { [name: string]: LoaderPlugin | undefined } = {};

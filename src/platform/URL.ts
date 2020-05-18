@@ -1,5 +1,4 @@
 import { features } from './features';
-import { origin } from './browser';
 
 /** Symbolic names for reUrlSimple match array members. */
 const enum UrlSimple {
@@ -79,7 +78,7 @@ export class URL {
 		let auth = parts[UrlFull.AUTH] || _;
 		auth = auth.substr(0, auth.length - 1);
 
-		const protocol = parts[UrlFull.PROTO] || _;
+		const protocol = parts[UrlFull.PROTO] || _;
 		const slashes = parts[UrlFull.SLASHES] || _;
 		const hostname = parts[UrlFull.HOSTNAME] || _;
 		const port = parts[UrlFull.PORT] || _;
@@ -90,7 +89,8 @@ export class URL {
 		const query = search.substr(1);
 		const hash = parts[UrlFull.HASH];
 
-		const href = protocol + (slashes && '//') + auth + (auth && '@') + host + path + hash;
+		const origin = protocol + (slashes && '//') + auth + (auth && '@') + host;
+		const href = origin + path + hash;
 
 		// Replace empty strings with null in all result fields except href.
 		_ = null;
@@ -107,6 +107,7 @@ export class URL {
 			query: query || _,
 			pathname: pathname || _,
 			path: path || _,
+			origin,
 			href
 		};
 	}
@@ -244,6 +245,8 @@ export class URL {
 	  * use backslahes in file system paths on Windows. */
 
 	static toLocal(key: string) {
+		const origin = features.origin;
+
 		if(key.match(/^file:/)) {
 			key = key.replace(/^file:\/\//, '');
 		} else if(origin && key.substr(0, origin.length) == origin) {

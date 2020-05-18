@@ -1,6 +1,5 @@
 import { slice } from './util';
 import { features } from './features';
-import { globalEnv } from './global';
 
 /** Get all elements by tag name.
   *
@@ -16,13 +15,3 @@ export function getTags(name: string, doc?: Document | false) {
 
 	return method ? slice.call(method.call(doc, name)) : [];
 }
-
-export const location = (typeof self == 'object' && globalEnv.location == self.location && self.location);
-
-/** Portable replacement for location.origin. */
-export const origin = (location ? (
-	location.protocol + '//' +
-	location.hostname +
-	(location.port ? ':' + location.port : '')
-) : ''
-);

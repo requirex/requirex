@@ -1,8 +1,9 @@
 import { Record } from '../Record';
 import { ChangeSet } from '../parser/ChangeSet';
+import { URL } from '../platform/URL';
 import { features } from '../platform/features';
 import { globalEnv, globalEval } from '../platform/global';
-import { location, origin, getTags } from '../platform/browser';
+import { getTags } from '../platform/browser';
 import { assign, assignReversible, emptyPromise } from '../platform/util';
 import { LoaderPlugin, pluginFactory } from '../Plugin';
 import { Loader } from '../Loader';
@@ -185,6 +186,7 @@ const reType = /^x-req[^-]*(-([^-]+)-)?/
 
 export interface DocumentConfig {
 
+	href?: string;
 	stage?: string;
 
 }
@@ -197,11 +199,13 @@ export class DocumentPlugin implements LoaderPlugin {
 		this.doc = features.doc;
 
 		if(config) {
+			const href = config.href;
 			let stage = config.stage;
 
-			if(stage == 'auto' && location) {
-				const host = location.hostname;
-				const match = location.search.match(/[?&]stage=([^&=]+)(&|$)/);
+			if(stage == 'auto' && href) {
+				const url = URL.parse(href);
+				const host = url.hostname;
+				const match = (url.search || '').match(/[?&]stage=([^&=]+)(&|$)/);
 
 				if(match) {
 					stage = match[1];
@@ -217,9 +221,10 @@ export class DocumentPlugin implements LoaderPlugin {
 	}
 
 	fetchRecord(record: Record) {
+		const href = this.config && this.config.href;
 		const doc = this.doc;
 
-		if(location) record.resolvedKey = origin + location.pathname + location.search;
+		if(href) record.resolvedKey = href.replace(/#.*/, '');
 
 		/** Wait until the page loads. */
 		const domReady = !doc ? emptyPromise : new Promise((resolve: () => void, reject: (err: any) => void) => {
