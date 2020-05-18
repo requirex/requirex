@@ -168,6 +168,8 @@ class JavaScriptPlugin implements LoaderPlugin {
 			return '';
 		});
 
+		if(!code) return;
+
 		const changeSet = new ChangeSet();
 
 		record.hasES6 = false;
