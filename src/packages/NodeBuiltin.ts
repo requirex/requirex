@@ -1,5 +1,5 @@
 import { URL } from '../platform/URL';
-import { assign, makeTable, Zalgo } from '../platform/util';
+import { assign, makeTable, Zalgo, stringify } from '../platform/util';
 import { unsupported, features } from '../platform/features';
 import { nodeRequire } from '../platform/node';
 import { Importation } from '../Status';
@@ -105,7 +105,7 @@ export class NodeBuiltinPlugin implements LoaderPlugin {
 				Type.prototype = Base.prototype;
 				Class.prototype = new (Type as any)();
 			},
-			inspect: (val: any) => JSON.stringify(val),
+			inspect: (val: any) => stringify(val),
 			deprecate: (func: Function, msg: string) => {
 				return function(this: any) {
 					console.log('Deprecated: ' + msg);

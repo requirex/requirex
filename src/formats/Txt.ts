@@ -1,3 +1,4 @@
+import { stringify } from '../platform/util';
 import { Record } from '../Record';
 import { LoaderPlugin, pluginFactory } from '../Plugin';
 
@@ -8,7 +9,7 @@ class TxtPlugin implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return JSON.stringify(record.sourceCode || record.compiled || '');
+		return stringify(record.sourceCode || record.compiled || '');
 	}
 
 	id?: string;

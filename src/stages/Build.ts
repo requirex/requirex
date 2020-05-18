@@ -1,5 +1,5 @@
 import { URL } from '../platform/URL';
-import { keys } from '../platform/util';
+import { keys, stringify } from '../platform/util';
 import { Record } from '../Record';
 import { Package } from '../packages/Package';
 import { LoaderPlugin, pluginFactory, nextWrap } from '../Plugin';
@@ -52,22 +52,20 @@ export class BuildPlugin implements LoaderPlugin {
 			}
 		}
 
-		const str = JSON.stringify;
-
 		return 'System.built(1,' + record.num + ',[{\n\t' + pkgList.map((name: string) => {
 			const spec = pkgTbl[name];
 			const pkg = spec.package;
-			const fields = ['name: ' + str(pkg.name)];
+			const fields = ['name: ' + stringify(pkg.name)];
 
-			if(pkg.version) fields.push('version: ' + str(pkg.version));
+			if(pkg.version) fields.push('version: ' + stringify(pkg.version));
 			if(pkg.rootKey) {
-				fields.push('root: ' + str(
+				fields.push('root: ' + stringify(
 					baseKey ? URL.relative(baseKey, pkg.rootKey) : pkg.rootKey
 				));
 			}
-			if(pkg.main) fields.push('main: ' + str(pkg.main));
+			if(pkg.main) fields.push('main: ' + stringify(pkg.main));
 
-			if(keys(pkg.map).length) fields.push('map: ' + str(pkg.map));
+			if(keys(pkg.map).length) fields.push('map: ' + stringify(pkg.map));
 
 			fields.push(
 				'files: [\n\t\t[\n' + spec.records.map((record: Record) => {
@@ -80,13 +78,13 @@ export class BuildPlugin implements LoaderPlugin {
 
 					for(let depName of record.importList.slice(0).sort()) {
 						const dep = record.importTbl[depName]!.record;
-						deps.push(str(depName) + ': ' + (dep ? dep.num : -1));
+						deps.push(stringify(depName) + ': ' + (dep ? dep.num : -1));
 					}
 
 					return '\t\t\t/* ' + pkg.name + ': ' + record.num! + ' */\n\t\t\t' + [
 						// TODO: registryKey
-						str(URL.relative(pkg.rootKey + '/', record.resolvedKey)),
-						str(record.getPlugins(this.loader.pluginStack)),
+						stringify(URL.relative(pkg.rootKey + '/', record.resolvedKey)),
+						stringify(record.getPlugins(this.loader.pluginStack)),
 						'{' + deps.join(', ') + '}',
 						code
 					].join(', ');

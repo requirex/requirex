@@ -2,6 +2,7 @@ import { FetchOptions, FetchHeaders, FetchResponse } from '../platform/fetch';
 import { Importation } from '../Status';
 import { Record } from '../Record';
 import { skipSlashes } from '../platform/URL';
+import { stringify } from '../platform/util';
 import { SourceMap } from '../SourceMap';
 import { features } from '../platform/features';
 import { origin } from '../platform/browser';
@@ -199,7 +200,7 @@ export class CachePlugin implements LoaderPlugin {
 				headers
 			};
 
-			const data = JSON.stringify(meta);
+			const data = stringify(meta);
 
 			if(res && !isHead) {
 				res.text().then((text: string) => {
@@ -426,7 +427,7 @@ export class CachePlugin implements LoaderPlugin {
 				// TODO: Maybe call a hook in the format plugin so it can store
 				// any additional metadata.
 
-				storage.write(StoreKind.META, record.resolvedKey, JSON.stringify(meta));
+				storage.write(StoreKind.META, record.resolvedKey, stringify(meta));
 				storage.write(StoreKind.TRANSPILED, record.resolvedKey, text);
 			}).catch(() => { });
 
@@ -434,7 +435,7 @@ export class CachePlugin implements LoaderPlugin {
 				storage.write(
 					StoreKind.SOURCEMAP,
 					record.resolvedKey,
-					JSON.stringify(record.sourceMap.json)
+					stringify(record.sourceMap.json)
 				);
 			}
 		}

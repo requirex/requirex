@@ -7,6 +7,8 @@ export const emptyPromise = Promise.resolve(void 0);
 /** Array.prototype.slice for turning array-like objects into arrays. */
 export const slice = [].slice;
 
+export const stringify = JSON.stringify;
+
 export function indexOf<Type>(needle: Type, haystack: Type[]) {
 	const count = haystack.length;
 

@@ -1,7 +1,7 @@
 import * as Lib from 'requirex-postcss-bundle';
 
 import { URL } from '../platform/URL';
-import { Zalgo, keys } from '../platform/util';
+import { Zalgo, keys, stringify } from '../platform/util';
 import { features } from '../platform/features';
 import { Importation } from '../Status';
 import { Record } from '../Record';
@@ -182,7 +182,7 @@ export class CSSPlugin implements LoaderPlugin {
 	}
 
 	wrap(record: Record) {
-		return JSON.stringify(record.sourceCode || record.compiled || '');
+		return stringify(record.sourceCode || record.compiled || '');
 	}
 
 	builder?: Promise<Lib.PostBuilder>;

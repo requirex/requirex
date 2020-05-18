@@ -1,5 +1,6 @@
-import { URL } from './platform/URL';
 import { encode64 } from '@lib/base64';
+import { URL } from './platform/URL';
+import { stringify } from './platform/util';
 
 /** See https://sourcemaps.info/spec.html */
 
@@ -79,7 +80,7 @@ export class SourceMap {
 		if(!this.encoded) {
 			this.encoded = (
 				'data:application/json;charset=utf-8;base64,' +
-				encode64(JSON.stringify(this.json))
+				encode64(stringify(this.json))
 			);
 		}
 
