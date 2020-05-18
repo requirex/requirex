@@ -16,6 +16,7 @@ import { TypeScript } from './formats/TypeScript';
 import { CommonJS } from './formats/CommonJS';
 import { AMD } from './formats/AMD';
 import { CSS } from './formats/CSS';
+import { Txt } from './formats/Txt';
 import { Json } from './formats/Json';
 import { Register } from './formats/Register';
 import { HTML } from './formats/HTML';
@@ -50,6 +51,7 @@ const js = JavaScript({
 });
 
 const html = HTML()
+const txt = Txt();
 
 System.config({
 	defaultFormat: js,
@@ -62,6 +64,10 @@ System.config({
 		css: CSS({
 			postCSS: true
 		}),
+		txt,
+		frag: txt,
+		vert: txt,
+		glsl: txt,
 		json: Json(),
 		htm: html,
 		html
