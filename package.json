@@ -1,6 +1,6 @@
 {
   "name": "requirex",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "description": "A different kind of module loader",
   "main": "dist/cjs/index.js",
   "module": "dist/esm/index.js",
@@ -41,8 +41,8 @@
     "@types/node": "^14.0.1",
     "autoroll": "^0.2.0",
     "mrepo": "0.0.2",
-    "requirex-postcss-bundle": "^0.3.0",
-    "rollup": "^2.10.2",
+    "requirex-postcss-bundle": "0.3.2",
+    "rollup": "^2.10.4",
     "typescript": "^3.9.2",
     "uglify-js": "^3.9.3"
   },
