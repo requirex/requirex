@@ -30,7 +30,7 @@ const reBeforeLiteral = new RegExp(
 
 /** Match the start of a JSX element: angle bracket, name, and whitespace or closing bracket.
   * A slash next to one of the brackets is optional. */
-const reElement = new RegExp('</?\s*([^' + sepList + ']+)(\s+|/?>)');
+const reElement = new RegExp('</?\\s*([^' + sepList + ']+)(\\s+|/?>)');
 
 /** Regexps to find matching quote characters and track newlines inside strings. */
 const reStringEnd = {
