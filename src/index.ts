@@ -95,7 +95,7 @@ System.config({
 			cdn: ['https://unpkg.com/'],
 			dependencies: {
 				'typescript': '^3',
-				'requirex-postcss-bundle': '0.3.2'
+				'requirex-postcss-bundle': '^0.3.2'
 			},
 			mainFields: (features.isNode ? ['main', 'module'] :
 				['unpkg', 'browser', 'main', 'module']
