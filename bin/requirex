@@ -2,22 +2,37 @@
 
 var url = require('..').URL;
 var name = process.argv[2];
+var mode = 'run';
 var code;
 
 if(name == '-e') {
 	name = '#';
 	code = process.argv[3];
+} else if(name == '-b') {
+	mode = 'build';
+	name = process.argv[3];
 }
 
 var resolved = url.fromLocal(
 	require('path').resolve(process.cwd(), name)
 );
 
-System.config({ baseURL: url.resolve(resolved, '.') });
+var parent = url.resolve(resolved, '.');
 
-(
-	code ? System.eval(code) : System.import(resolved)
-).catch(function(err) {
-	console.error(err);
-	process.exit(1);
-});
+if(mode == 'run') {
+	System.config({ baseURL: parent });
+
+	(
+		code ? System.eval(code) : System.import(resolved)
+	).catch(function(err) {
+		console.error(err);
+		process.exit(1);
+	});
+} else if(mode == 'build') {
+	System.build(resolved, parent).then(function(code) {
+		process.stdout.write(code);
+	}).catch(function(err) {
+		console.error(err);
+		process.exit(1);
+	});
+}
