@@ -67,7 +67,7 @@ export class Loader {
 	constructor(public external: RequireX) {
 		this.pluginStack = { plugin: new BasePlugin(this) };
 
-		const manager = features.hasWorker && WorkerManager.createManager();
+		const manager = features.hasWorker && WorkerManager.createManager(this);
 		if(manager) this.workerManager = manager;
 	}
 

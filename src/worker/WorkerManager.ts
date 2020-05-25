@@ -1,6 +1,7 @@
 import { encode64 } from '@lib/base64';
 import { keys, slice, stringify } from '../platform/util';
 import { PluginClass, LoaderPlugin } from '../Plugin';
+import { Loader } from '../Loader';
 import { Channel, MessageKind } from './Channel';
 
 /** Wraps a Web Worker method call and handlers for finalizing a promise
@@ -48,7 +49,7 @@ export class WorkerManager {
 	  * @return Worker manager instance or undefined if no URL was given or
 	  * detected. */
 
-	static createManager(loaderAddress?: string) {
+	static createManager(loader: Loader, loaderAddress?: string) {
 		const script = document.currentScript as HTMLScriptElement | null;
 
 		if(script && typeof script == 'object' && script.src) {
@@ -65,13 +66,10 @@ export class WorkerManager {
 			}
 		}
 
-		if(loaderAddress) return new WorkerManager(loaderAddress);
+		if(loaderAddress) return new WorkerManager(loader, loaderAddress);
 	}
 
-	private constructor(loaderAddress: string) {
-		const address = stringify(loaderAddress);
-		this.workerCode = 'data:application/javascript;base64,' + encode64('importScripts(' + address + ');System.config({baseURL:' + address + '})');
-	}
+	private constructor(private loader: Loader, private loaderAddress: string) { }
 
 	/** Create a new Web Worker.
 	  * 
@@ -81,7 +79,17 @@ export class WorkerManager {
 		const group = this.pools[affinity];
 
 		group.workerStack.push(new Channel(
-			new Worker(this.workerCode),
+			new Worker(this.workerCode || (this.workerCode = (
+				'data:application/javascript;base64,' +
+				encode64(
+					'importScripts(' + stringify(this.loaderAddress) +
+					');System.config({baseURL:' + stringify(
+						this.loader.config.baseURL ||
+						this.loader.config.libraryBaseKey ||
+						this.loaderAddress
+					) + '})'
+				)
+			))),
 			(data: any) => {
 				const plugin = this.routeTbl[data.route];
 				return plugin && plugin[data.method].apply(plugin, data.args);
@@ -262,6 +270,6 @@ export class WorkerManager {
 		}
 	});
 
-	private workerCode: string;
+	private workerCode?: string;
 
 }
