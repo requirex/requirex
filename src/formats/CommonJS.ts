@@ -18,7 +18,7 @@ class CommonJSPlugin implements LoaderPlugin {
 		const loader = this.loader;
 
 		const cjsRequire: NodeRequire = (
-			(key: string) => loader.require(key, record.resolvedKey, record)
+			(key: string) => loader.importSync(key, record.resolvedKey, record)
 		) as any;
 
 		// TODO: maybe support cjsRequire.resolve.paths()

@@ -99,7 +99,7 @@ export class Loader {
 
 		for(let name of keys(registry)) {
 			const module = { exports: registry[name], id: name };
-			const record = new Record(name, this.newImportation(name));
+			const record = this.records[name] || new Record(name, this.newImportation(name));
 
 			record.moduleInternal = module;
 			record.fetched = Promise.resolve(record);
@@ -243,6 +243,9 @@ export class Loader {
 		status?: Status,
 		parent?: Record
 	) {
+		const pos = baseKey && baseKey.indexOf('!') + 1;
+		if(pos) baseKey = baseKey!.substr(pos);
+
 		const importation: Importation = {
 			baseKey: baseKey || this.config.baseURL,
 			extensionList: [],
@@ -274,9 +277,63 @@ export class Loader {
 		);
 	}
 
+	/** @param resolve Callback.
+	  * @param reject Errback. */
+
+	require(
+		names: string | string[],
+		resolve?: (...args: any[]) => any,
+		reject?: (err: any) => any,
+		referer?: string | Record,
+		config?: any
+	): any {
+		let record: Record | undefined;
+
+		if(referer instanceof Record) {
+			record = referer;
+			referer = referer.resolvedKey;
+		}
+
+		if(typeof names == 'object' && !(names instanceof Array)) {
+			// First argument was a config object, make it the last one.
+			return this.require(resolve as any, reject, referer as any, config, names);
+		} else if(typeof resolve == 'function') {
+			// Asynchronous require().
+			if(typeof names == 'string') names = [names];
+
+			Promise.all(
+				names.map((key) => this.import(key, referer as string | undefined))
+			).then(
+				((imports: any[]) => resolve.apply(null, imports)),
+				reject
+			);
+		} else if(typeof names == 'string') {
+			return this.importSync(names, referer, record);
+		} else {
+			throw new TypeError('Invalid require');
+		}
+	};
+
+	makeRequire(record: Record, baseKey = record.resolvedKey) {
+		// Dynamic require() function.
+		const require = (
+			names: string | string[],
+			resolve?: (...args: any[]) => any,
+			reject?: (err: any) => any,
+			referer?: string
+		) => this.require(names, resolve, reject, referer || record);
+
+		require.toUrl = (key: string) => {
+			const result = this.resolveSync(key, baseKey);
+			return result;
+		}
+
+		return require;
+	}
+
 	/** Synchronous import, like Node.js require(). */
 
-	require(importKey: string, baseKey?: string, parent?: Record) {
+	importSync(importKey: string, baseKey?: string, parent?: Record) {
 		if(parent) {
 			const importation = parent && parent.importTbl[importKey];
 
@@ -466,7 +523,7 @@ export class Loader {
 		}
 
 		return Promise.resolve(
-			nextResolve(importation, null)
+			this.records[importKey] ? importKey : nextResolve(importation, null)
 		).catch(
 			() => this.resolveSync(importKey, baseKey, importation)
 		);

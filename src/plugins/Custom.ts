@@ -41,6 +41,8 @@ class CustomPlugin implements LoaderPlugin {
 					customArg,
 					(key: string) => this.loader.resolveSync(key, baseKey)
 				) || '@undefined';
+			} else if(customArg.match(/^\.?\.?\//)) {
+				customArg = this.loader.resolveSync(customArg, baseKey);
 			}
 
 			importation.importKey = importKey;
@@ -67,12 +69,7 @@ class CustomPlugin implements LoaderPlugin {
 
 			customPlugin.load(
 				importation.customArg,
-				(key: string | string[], done: (result: any) => void) => {
-					if(typeof key != 'string') key = key[0];
-
-					loadedKey = key;
-					this.loader.import(key, importation.baseKey, meta).then(done);
-				},
+				this.loader.makeRequire(record, importation.baseKey),
 				resolve,
 				this.loader.config.pluginConfig
 			)

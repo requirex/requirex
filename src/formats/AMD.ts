@@ -4,7 +4,12 @@ import { ModuleAMD } from '../ModuleObject';
 import { LoaderPlugin, pluginFactory } from '../Plugin';
 import { Loader } from '../Loader';
 
-export type ModuleFactory = (...args: any[]) => any;
+export interface ModuleFactory {
+	(...args: any[]): any;
+
+	/** Exists if the factory is a loader plugin. */
+	load?: () => any;
+}
 
 function initRecord(record: Record) {
 	const exports = {};
@@ -12,12 +17,14 @@ function initRecord(record: Record) {
 	// TODO: Add globals.
 	// console.log('INIT', record.resolvedKey);
 
-	record.moduleInternal = {
-		config: () => { },
-		exports,
-		id: record.resolvedKey, // record.registryKey,
-		uri: record.resolvedKey
-	};
+	if(!record.moduleInternal) {
+		record.moduleInternal = {
+			config: () => { },
+			exports,
+			id: record.resolvedKey, // record.registryKey,
+			uri: record.resolvedKey
+		};
+	}
 
 	return record;
 }
@@ -48,7 +55,7 @@ export class AMDPlugin implements LoaderPlugin {
 			deps = void 0;
 		}
 
-		if(typeof factory != 'function') {
+		if(typeof factory != 'function' || factory.load) {
 			const value = factory;
 			factory = () => value;
 		}
@@ -73,9 +80,19 @@ export class AMDPlugin implements LoaderPlugin {
 			// Add factory to a new record if a name was defined, not matching
 			// the containing record's name or package name.
 
-			record = record.addBundled(this.loader.records[key] || (
-				this.loader.records[key] = initRecord(new Record(key, this.loader.newImportation(key)))
-			));
+			let subRecord = this.loader.records[key];
+			if(subRecord) return;
+
+			subRecord = initRecord(new Record(key, this.loader.newImportation(key)));
+			this.loader.records[key] = subRecord;
+
+			record.addBundled(subRecord);
+			record = subRecord;
+
+			record.fetched = Promise.resolve(record);
+
+			if(this.loader.defaultPlugin) record.addPlugin(this.loader.defaultPlugin);
+			record.addPlugin(this);
 		}
 
 		const internalDeps: { [key: string]: number } = {
@@ -98,46 +115,7 @@ export class AMDPlugin implements LoaderPlugin {
 			record.importNumList = [0, 1, 2];
 		}
 
-		// Disallow redefining a module.
-		/* if(record.moduleInternal) {
-			throw new Error('Cannot redefine module "' + key + '"');
-		} */
-
 		record.factory = factory;
-	};
-
-	amdRequire = (
-		names: string | string[],
-		resolve?: (...args: any[]) => any,
-		reject?: (err: any) => any,
-		referer?: string | Record,
-		config?: any
-	): any => {
-		let record: Record | undefined;
-
-		if(referer instanceof Record) {
-			record = referer;
-			referer = referer.resolvedKey;
-		}
-
-		if(typeof names == 'object' && !(names instanceof Array)) {
-			// First argument was a config object, make it the last one.
-			return (this as any).amdRequire(resolve, reject, referer, config, names);
-		} else if(typeof resolve == 'function') {
-			// Asynchronous require().
-			if(typeof names == 'string') names = [names];
-
-			Promise.all(
-				names.map((key) => this.loader.import(key, referer as string | undefined))
-			).then(
-				((imports: any[]) => resolve.apply(null, imports)),
-				reject
-			);
-		} else if(typeof names == 'string') {
-			return this.loader.require(names, referer, record);
-		} else {
-			throw new TypeError('Invalid require');
-		}
 	};
 
 	/** Call AMD definition code during analyze() to follow dependencies. */
@@ -154,7 +132,7 @@ export class AMDPlugin implements LoaderPlugin {
 
 		record.setArgs(record.globals, {
 			define: this.amdDefine,
-			require: this.amdRequire,
+			require: this.loader.makeRequire(record),
 			global: globalEnv,
 			GLOBAL: globalEnv
 		});
@@ -188,16 +166,7 @@ export class AMDPlugin implements LoaderPlugin {
 	instantiate(record: Record) {
 		const moduleInternal = record.moduleInternal as ModuleAMD;
 
-		// Dynamic require() function.
-		const require = (
-			names: string | string[],
-			resolve?: (...args: any[]) => any,
-			reject?: (err: any) => any,
-			referer?: string
-		) => this.amdRequire(names, resolve, reject, referer || record);
-
-		// Simulate Dojo loader method.
-		require.toUrl = (key: string) => this.loader.resolveSync(key, record.resolvedKey);
+		const require = this.loader.makeRequire(record);
 
 		// Order must match internalDeps in amdDefine.
 		const deps: any[] = [

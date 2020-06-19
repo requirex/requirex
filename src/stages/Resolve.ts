@@ -30,6 +30,12 @@ function resolvePackageMaps(state: ResolveState) {
 	let prevKey: string | undefined;
 	const map = state.loader.package.map;
 
+	const pos = importKey.indexOf('/') + 1
+	if(pos && importKey.substr(0, pos) == baseKey.substr(0, pos)) {
+		state.resolvedKey = importKey;
+		return;
+	}
+
 	while(importKey != prevKey && --state.count) {
 		let lookupKey = importKey;
 		let rootKey = rootPathLookup(lookupKey, pkg.map) || rootPathLookup(lookupKey, map);
